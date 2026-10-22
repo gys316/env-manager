@@ -4,7 +4,7 @@
 
 사용자는 에이전트에게 이렇게 요청하면 됩니다.
 
-> `https://github.com/<owner>/env-manager/blob/main/INSTALL.md` 를 읽고 envsync를 설치해줘.
+> `https://github.com/gys316/env-manager/blob/main/INSTALL.md` 를 읽고 envsync를 설치해줘.
 
 ## 에이전트가 지켜야 할 규칙
 
@@ -51,7 +51,7 @@ SOPS 모드(암호화 파일을 git에 커밋하는 방식)를 쓸지 모르면 
 **envsync CLI**
 
 ```
-npm i -g github:<owner>/env-manager
+npm i -g github:gys316/env-manager
 ```
 
 레포를 이미 클론했다면 그 폴더에서 `npm install && npm run build && npm link`로 대신한다.
@@ -59,10 +59,10 @@ npm i -g github:<owner>/env-manager
 **Claude Code 스킬**
 
 ```
-npx skills add <owner>/env-manager --skill envsync -a claude-code -g -y
+npx skills add gys316/env-manager --skill envsync -a claude-code -g -y
 ```
 
-클론한 폴더가 있다면 `<owner>/env-manager` 대신 그 경로를 넣어도 된다(예: `npx skills add ./env-manager --skill envsync -a claude-code -g -y`). 스킬은 다음 Claude Code 세션부터 불러온다.
+클론한 폴더가 있다면 `gys316/env-manager` 대신 그 경로를 넣어도 된다(예: `npx skills add ./env-manager --skill envsync -a claude-code -g -y`). 스킬은 다음 Claude Code 세션부터 불러온다.
 
 ## 3. 검증
 
