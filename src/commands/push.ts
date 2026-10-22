@@ -71,7 +71,13 @@ export async function push(ctx: Context, opts: { yes: boolean; force: boolean })
     for (const c of candidates) io.info(summaryLine(c));
     if (!opts.yes) {
       if (!io.interactive) {
-        throw new EnvsyncError('CONFIRMATION_REQUIRED', '확인이 필요한 작업입니다.', '--yes 옵션을 붙여 다시 실행하세요.');
+        // 승인 전에 키 이름을 보여줄 수 있도록 올릴 후보(키 이름만)를 함께 돌려준다.
+        throw new EnvsyncError(
+          'CONFIRMATION_REQUIRED',
+          '확인이 필요한 작업입니다.',
+          '변경 내용을 확인한 뒤 --yes 옵션을 붙여 다시 실행하세요.',
+          candidates,
+        );
       }
       if (!(await io.confirm('위 변경을 반영할까요?'))) {
         for (const c of candidates) c.status = 'skipped';

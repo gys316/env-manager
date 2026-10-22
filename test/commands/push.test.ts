@@ -77,6 +77,19 @@ describe('push', () => {
     expect(a.vault.notes.size).toBe(0);
   });
 
+  test('CONFIRMATION_REQUIRED carries candidate files with key names only', async () => {
+    const a = await makeCtx({
+      files: ['.env', '.env.b'],
+      local: { '.env': 'NEW_KEY=topsecret\n', '.env.b': 'B=1' },
+      io: new MemoryIo({ interactive: false }),
+    });
+    await a.vault.upsertNote('envsync:kys/app:.env.b', 'B=1');
+    const err = await push(a.ctx, { yes: false, force: false }).catch((e) => e);
+    expect(err.code).toBe('CONFIRMATION_REQUIRED');
+    expect(err.details).toEqual([{ path: '.env', status: 'pushed', added: ['NEW_KEY'], removed: [], changed: [] }]);
+    expect(JSON.stringify(err.details)).not.toContain('topsecret');
+  });
+
   test('declined confirm writes nothing', async () => {
     const a = await makeCtx({ files: ['.env'], local: { '.env': 'A=1' }, io: new MemoryIo({ confirmAnswer: false }) });
     const r = await push(a.ctx, { yes: false, force: false });
