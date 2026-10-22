@@ -69,10 +69,13 @@ export class FakeVault implements Vault {
 export class FakeSops implements Sops {
   lossy: Set<SopsFormat>;
   failEncrypt: Set<SopsFormat>;
+  /** true이면 실제 sops처럼 암호화 형식과 다른 형식으로 복호화하면 실패한다. */
+  strictFormat: boolean;
 
-  constructor(opts: { lossy?: Set<SopsFormat>; failEncrypt?: Set<SopsFormat> } = {}) {
+  constructor(opts: { lossy?: Set<SopsFormat>; failEncrypt?: Set<SopsFormat>; strictFormat?: boolean } = {}) {
     this.lossy = opts.lossy ?? new Set();
     this.failEncrypt = opts.failEncrypt ?? new Set();
+    this.strictFormat = opts.strictFormat ?? false;
   }
 
   async checkVersion(): Promise<void> {}
@@ -92,7 +95,7 @@ export class FakeSops implements Sops {
     if (this.lossy.has(m[1] as SopsFormat) && plain.length > 0 && plain[plain.length - 1] === 0x0a) {
       plain = plain.subarray(0, plain.length - 1);
     }
-    void format;
+    if (this.strictFormat && m[1] !== format) throw new EnvsyncError('SOPS_ERROR', 'sops 복호화에 실패했습니다.');
     return plain;
   }
 }

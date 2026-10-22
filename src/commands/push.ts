@@ -67,9 +67,10 @@ export async function push(ctx: Context, opts: { yes: boolean; force: boolean })
     );
   }
 
+  // 확인이 필요할 때만 미리 보기를 찍는다. --yes면 결과는 cli가 파일별로 한 번 출력한다.
   if (candidates.length > 0) {
-    for (const c of candidates) io.info(summaryLine(c));
     if (!opts.yes) {
+      for (const c of candidates) io.info(summaryLine(c));
       if (!io.interactive) {
         // 승인 전에 키 이름을 보여줄 수 있도록 올릴 후보(키 이름만)를 함께 돌려준다.
         throw new EnvsyncError(
@@ -87,12 +88,14 @@ export async function push(ctx: Context, opts: { yes: boolean; force: boolean })
     }
   }
 
+  let configChanged = false;
   try {
     for (const c of candidates) {
       const local = locals.get(c.path) as Buffer;
       const w = await backend.write(c.path, local);
       c.status = 'pushed';
       if (w.warning) c.warning = w.warning;
+      if (w.configChanged) configChanged = true;
       state.set(c.path, { hash: sha256(local), remoteVersion: w.version });
     }
   } finally {
@@ -100,6 +103,15 @@ export async function push(ctx: Context, opts: { yes: boolean; force: boolean })
   }
 
   for (const r of results) if (r.warning) io.warn(r.warning);
-  if (config.mode === 'sops' && candidates.length > 0) io.info('.enc 파일을 git에 커밋하세요');
+  if (config.mode === 'sops' && candidates.length > 0) {
+    const encFiles = candidates.map((c) => `${c.path}.enc`);
+    if (configChanged) {
+      io.info(
+        `.envsync.config가 바뀌었습니다(formats). 다른 PC에서 복호화할 수 있도록 .enc 파일과 함께 커밋하세요: ${['.envsync.config', ...encFiles].join(', ')}`,
+      );
+    } else {
+      io.info(`다음 파일을 git에 커밋하세요: ${encFiles.join(', ')}`);
+    }
+  }
   return results;
 }

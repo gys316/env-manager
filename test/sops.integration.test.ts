@@ -39,6 +39,19 @@ describe.skipIf(!exe)('real sops', () => {
     else console.log(`[observe] ${fmt} round-trip byte-identical: ${back.equals(original)}`);
   });
 
+  test('format mismatch fails to decrypt and the right format succeeds (basis for the binary retry)', async () => {
+    const key = await generateAgeKey();
+    const plain = path.join(dir, 'p.env');
+    await writeFile(plain, 'A=1\n');
+    const binEnc = path.join(dir, 'bin.enc');
+    const envEnc = path.join(dir, 'env.enc');
+    await writeFile(binEnc, await sops.encryptFile(plain, 'binary', key.recipient));
+    await writeFile(envEnc, await sops.encryptFile(plain, 'dotenv', key.recipient));
+    await expect(sops.decryptFile(binEnc, 'dotenv', key.identity)).rejects.toMatchObject({ code: 'SOPS_ERROR' });
+    expect((await sops.decryptFile(binEnc, 'binary', key.identity)).toString('utf8')).toBe('A=1\n');
+    await expect(sops.decryptFile(envEnc, 'binary', key.identity)).rejects.toMatchObject({ code: 'SOPS_ERROR' });
+  });
+
   // 실제 사용처럼 cwd가 .sops.yaml이 있는 디렉터리인 상태로 sops를 실행하는 러너.
   const inDir = (cwd: string): Runner => (cmd, args, opts) => spawnRunner(cmd, args, { ...opts, cwd });
 

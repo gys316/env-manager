@@ -165,3 +165,27 @@ test('vault backend rejects non-UTF-8 content (UTF-16LE with BOM) and NUL bytes'
   await expect(be.write('.env', Buffer.from([0x41, 0x3d, 0xc3]))).rejects.toMatchObject({ code: 'UNSUPPORTED_FILE' });
   expect(vault.notes.size).toBe(0);
 });
+
+test('sops backend read retries as binary when the configured format fails', async () => {
+  const { be, root } = await sopsSetup({}, new FakeSops({ strictFormat: true }));
+  await writeFile(path.join(root, '.env.enc'), 'FAKE:binary:' + Buffer.from('A=1\n').toString('base64'));
+  const r = await be.read('.env');
+  expect(r?.content.toString()).toBe('A=1\n');
+  expect(r?.warning).toContain('.envsync.config');
+});
+
+test('sops backend read: both formats fail -> SOPS_ERROR with format/key hint', async () => {
+  const { be, root } = await sopsSetup({}, new FakeSops({ strictFormat: true }));
+  await writeFile(path.join(root, '.env.enc'), 'garbage');
+  const err = await be.read('.env').catch((e) => e);
+  expect(err).toMatchObject({ code: 'SOPS_ERROR' });
+  expect(err.hint).toContain('.envsync.config');
+  expect(err.hint).toContain('키');
+});
+
+test('sops backend write reports configChanged when it switches to binary', async () => {
+  const { be } = await sopsSetup({ '.env': 'A=1\n' }, new FakeSops({ lossy: new Set<SopsFormat>(['dotenv']) }));
+  expect((await be.write('.env', Buffer.from('A=1\n'))).configChanged).toBe(true);
+  const plain = await sopsSetup({ '.env': 'A=1\n' });
+  expect((await plain.be.write('.env', Buffer.from('A=1\n'))).configChanged).toBeUndefined();
+});

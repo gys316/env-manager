@@ -7,12 +7,15 @@ import { EnvsyncError } from './errors.js';
 import type { Sops, SopsFormat } from './sops.js';
 import { sha256 } from './state.js';
 
-export type Remote = { content: Buffer; version: string };
+export type Remote = { content: Buffer; version: string; warning?: string };
+
+/** configChanged: 쓰는 도중 `.envsync.config`(formats)를 바꿨다(커밋 안내가 필요). */
+export type WriteResult = { version: string; warning?: string; configChanged?: true };
 
 export interface Backend {
   read(path: string): Promise<Remote | null>;
   version(path: string): Promise<string | null>;
-  write(path: string, content: Buffer): Promise<{ version: string; warning?: string }>;
+  write(path: string, content: Buffer): Promise<WriteResult>;
 }
 
 export const noteName = (repo: string, filePath: string): string => `envsync:${repo}:${filePath}`;
@@ -111,8 +114,32 @@ export class SopsBackend implements Backend {
   async read(p: string): Promise<Remote | null> {
     const enc = await this.readEnc(p);
     if (!enc) return null;
-    const content = await this.sops.decryptFile(this.encPath(p), this.format(p), await this.key());
-    return { content, version: sha256(enc) };
+    const identity = await this.key();
+    const f = this.format(p);
+    const version = sha256(enc);
+    const isSopsError = (e: unknown) => e instanceof EnvsyncError && e.code === 'SOPS_ERROR';
+    try {
+      return { content: await this.sops.decryptFile(this.encPath(p), f, identity), version };
+    } catch (e) {
+      if (f === 'binary' || !isSopsError(e)) throw e;
+    }
+    // 다른 PC에서 binary로 바꾼 뒤 .envsync.config의 formats를 커밋하지 않은 경우: binary로 다시 시도한다.
+    // (sops는 형식이 다르면 복호화에 실패하므로, binary로 성공하면 binary 암호문이다.)
+    try {
+      const content = await this.sops.decryptFile(this.encPath(p), 'binary', identity);
+      return {
+        content,
+        version,
+        warning: `${p}: .enc 파일이 binary 형식인데 .envsync.config의 formats에 기록이 없습니다. 이 파일을 binary로 바꾼 PC에서 .envsync.config를 커밋했는지 확인하세요.`,
+      };
+    } catch (e) {
+      if (!isSopsError(e)) throw e;
+      throw new EnvsyncError(
+        'SOPS_ERROR',
+        `${p}.enc 복호화에 실패했습니다.`,
+        `.envsync.config의 형식(formats) 기록이 .enc와 맞지 않거나(.envsync.config가 .enc와 함께 커밋되었는지 확인), 이 레포의 age 키가 아니거나, 파일이 손상되었습니다.`,
+      );
+    }
   }
 
   /**
@@ -120,7 +147,7 @@ export class SopsBackend implements Backend {
    * 인자로 받은 content는 디스크의 그 파일 내용과 같아야 한다(push는 항상 디스크에서 읽은 내용을 넘긴다).
    * 암호문만 `<path>.enc.tmp`에 쓴 뒤 rename한다. 평문은 어디에도 쓰지 않는다.
    */
-  async write(p: string, content: Buffer): Promise<{ version: string; warning?: string }> {
+  async write(p: string, content: Buffer): Promise<WriteResult> {
     const identity = await this.key();
     const recipient = this.recipient();
     const encPath = this.encPath(p);
@@ -174,6 +201,7 @@ export class SopsBackend implements Backend {
     await this.onConfigChange(this.config);
     return {
       version: sha256(cipher),
+      configChanged: true,
       warning: `${p}: SOPS ${f} 형식에서 내용이 보존되지 않아 binary 형식으로 암호화했습니다 (git diff에 키 이름이 보이지 않음)`,
     };
   }
