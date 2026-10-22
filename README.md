@@ -18,20 +18,51 @@
 
 필요한 것: Node.js 22.12 이상, Bitwarden CLI(`bw`), git. SOPS 모드를 쓸 때만 `sops` 3.9 이상이 더 필요합니다.
 
+> AI 에이전트에게 설치를 맡기려면 이렇게 요청하세요: "`https://github.com/<owner>/env-manager/blob/main/INSTALL.md`를 읽고 envsync를 설치해줘." 에이전트는 [INSTALL.md](INSTALL.md) 절차대로 설치하고, Bitwarden 로그인·잠금 해제만 직접 하도록 안내합니다.
+
+`<owner>`는 이 레포의 GitHub 소유자 이름으로 바꾸세요.
+
+**1. Bitwarden CLI**
+
 ```
-# Bitwarden CLI (둘 중 하나)
-winget install Bitwarden.CLI
-npm i -g @bitwarden/cli
+winget install --id Bitwarden.CLI -e     # Windows
+brew install bitwarden-cli               # macOS
+npm i -g @bitwarden/cli                  # 공통
+```
 
-# sops 3.9 이상 (SOPS 모드를 쓸 때만)
-winget install Mozilla.SOPS
-brew install sops
+**2. sops 3.9 이상 (SOPS 모드를 쓸 때만)**
 
-# envsync (<owner>는 이 레포의 GitHub 소유자 이름으로 바꾸세요)
+```
+winget install --id SecretsOPerationS.SOPS -e   # Windows
+brew install sops                               # macOS
+# Linux: https://github.com/getsops/sops/releases 에서 바이너리를 받아 PATH에 둡니다
+```
+
+**3. envsync CLI**
+
+```
 npm i -g github:<owner>/env-manager
 # 또는 클론한 폴더에서
 npm install && npm run build && npm link
 ```
+
+**4. Claude Code 스킬 (선택)**
+
+```
+npx skills add <owner>/env-manager --skill envsync -a claude-code -g
+```
+
+`-g`는 사용자 전체(`~/.claude/skills`)에 설치하고, 빼면 현재 프로젝트의 `.claude/skills`에 설치합니다. 클론한 폴더가 있으면 `<owner>/env-manager` 대신 경로를 넣어도 됩니다(`npx skills add ./env-manager --skill envsync -a claude-code -g`). 업데이트는 `npx skills update envsync`, 제거는 `npx skills remove envsync`입니다.
+
+**설치 확인**
+
+```
+envsync --version
+bw --version
+sops --version --disable-version-check   # SOPS 모드를 쓸 때만
+```
+
+Windows에서 winget으로 설치한 직후 명령을 찾지 못하면 터미널을 새로 여세요.
 
 ## 처음 설정
 
@@ -177,14 +208,13 @@ git rm --cached backend/.env
 
 ## AI 에이전트에서 쓰기
 
-Claude Code용 스킬이 `skills/envsync`에 들어 있습니다. 설치하려면 이 폴더를 `~/.claude/skills/envsync`로 복사하세요.
+Claude Code용 스킬이 `skills/envsync`에 들어 있습니다. [설치](#설치)의 4번처럼 `npx skills`로 설치합니다.
 
 ```
-# bash / zsh
-cp -r skills/envsync ~/.claude/skills/envsync
-# PowerShell
-Copy-Item -Recurse skills\envsync $HOME\.claude\skills\envsync
+npx skills add <owner>/env-manager --skill envsync -a claude-code -g
 ```
+
+`npx skills`를 쓸 수 없으면 폴더를 직접 복사해도 됩니다(`skills/envsync` → `~/.claude/skills/envsync`).
 
 에이전트는 마스터 비밀번호나 세션 토큰을 받지 않으므로, Claude Code를 실행하기 전에 같은 터미널에서 먼저 잠금을 풀어 두세요.
 

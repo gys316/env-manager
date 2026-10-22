@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { Command, CommanderError } from 'commander';
 import { BwCli } from './bitwarden.js';
 import { addFile, removeFile } from './commands/files.js';
@@ -71,11 +72,17 @@ async function execute(command: string, g: Globals, fn: (deps: Deps, io: Io) => 
   }
 }
 
+// src/와 dist/ 모두 레포 루트의 package.json 한 단계 위
+const VERSION = (
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+).version;
+
 async function main(argv: string[]): Promise<void> {
   const program = new Command();
   program
     .name('envsync')
     .description('.env/YAML 비밀 파일을 Bitwarden(선택: SOPS)과 동기화합니다.')
+    .version(VERSION, '-v, --version', '버전 표시')
     .option('--yes', '확인 없이 진행')
     .option('--json', 'stdout에 JSON 한 줄로 출력')
     .option('--force', '충돌/로컬 변경을 무시하고 덮어쓰기')

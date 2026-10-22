@@ -72,6 +72,12 @@ describe('cli', () => {
     for (const c of ['init', 'push', 'pull', 'status', 'add', 'remove']) expect(out).toContain(c);
   });
 
+  test('--version prints package version', async () => {
+    const r = await run(['--version'], process.cwd());
+    expect(r.code).toBe(0);
+    expect(r.stdout.toString().trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   test('unknown command -> exit 2', async () => {
     const r = await run(['bogus'], process.cwd());
     expect(r.code).toBe(2);

@@ -1,6 +1,6 @@
 ---
 name: envsync
-description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않을 때(클론 직후, 새 PC 등), 또는 env/YAML 파일을 수정한 뒤 Bitwarden에 반영해야 할 때 사용한다. envsync CLI로 Bitwarden(선택: SOPS)과 비밀값 파일을 동기화한다.
+description: "envsync 사용·설치 스킬. .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않을 때(클론 직후, 새 PC 등), env/YAML 파일을 수정한 뒤 Bitwarden에 반영해야 할 때, 또는 envsync를 설치·설정해 달라는 요청을 받았을 때 사용한다. envsync CLI로 Bitwarden(선택 사항으로 SOPS)과 비밀값 파일을 동기화한다."
 ---
 
 # envsync 사용 지침
@@ -20,6 +20,7 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 2. **env를 바꾼 뒤 반영할 때**: 먼저 `envsync push --json`(`--yes` 없이)을 실행한다. 아무것도 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)로 끝나며, `files`에 올릴 파일별 `added`/`changed`/`removed` 키 이름(또는 `opaque`)이 담긴다. 이 키 이름을 사용자에게 보여주고 승인받은 뒤에만 `envsync push --yes --json`을 실행한다. push 결과의 키 이름을 요약해서 보고한다. 바뀐 파일이 없으면 첫 실행이 그대로 `ok: true`로 끝난다. SOPS 모드이면 생성된 `<파일>.enc`를 커밋하라고 안내한다. push가 `.envsync.config`가 바뀌었다고 알리면(binary 형식 전환) `.envsync.config`도 `.enc`와 함께 커밋하라고 안내한다. pull이 `.gitignore`에 파일을 추가했다고 경고하면 `.gitignore` 변경을 커밋하라고 안내한다.
 3. **다른 PC의 변경을 받을 때**: 별도 `fetch` 명령은 없다. `envsync status --json`(내부에서 `bw sync` 실행)으로 `remote-changed`인 파일을 확인한다. `remote-changed`는 이 PC에서 로컬을 고치지 않았다는 뜻이므로 `envsync pull --json`이 `--force` 없이 원격 내용으로 갱신한다(fast-forward, 백업 없음). 사용자에게 어떤 파일이 갱신되는지 알리고 pull을 실행한다. `conflict`(양쪽 다 바뀜)나 `differs`(동기화 기록 없이 내용이 다름)이면 pull은 그 파일을 건너뛰고 `PULL_SKIPPED`로 끝난다.
 4. 결과는 키 이름과 경로까지만 사용자에게 전달한다.
+5. **설치·업데이트·점검 요청을 받았을 때**: 레포의 `INSTALL.md` 절차를 따른다. 요약하면 `node --version`(22.12 이상), `bw --version`, `envsync --version`, SOPS 모드라면 `sops --version --disable-version-check`(3.9 이상)로 확인한다. 빠진 것만 설치 목록으로 보여 주고 승인을 받은 뒤 설치한다(Windows: `winget install --id Bitwarden.CLI -e`, `winget install --id SecretsOPerationS.SOPS -e` / macOS: `brew install bitwarden-cli sops` / 공통: `npm i -g @bitwarden/cli`, envsync는 `npm i -g github:<owner>/env-manager`). 스킬 업데이트는 `npx skills update envsync`다. `bw login`·`bw unlock`은 실행하지 않고 사용자에게 안내만 한다.
 
 ## 오류 처리
 
@@ -29,7 +30,7 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 - `CONFIRMATION_REQUIRED`(exit 8): 아무것도 바뀌지 않았다. `files`의 키 이름을 사용자에게 보여주고 승인받은 뒤 `--yes`를 붙여 다시 실행한다.
 - `UNSUPPORTED_FILE`(exit 2)로 UTF-8이 아니라고 하면: 사용자에게 파일을 UTF-8로 다시 저장하거나 `envsync init --encrypt`를 쓰라고 안내한다. 파일을 직접 열어 변환하지 않는다.
 - `NOTE_TOO_LARGE`(exit 9): vault 모드의 7000바이트 제한. 사용자에게 `envsync init --encrypt`(SOPS 모드)를 안내한다.
-- `MISSING_DEPENDENCY`(exit 7): `bw` 또는 `sops`(3.9 이상) 설치를 안내한다.
+- `MISSING_DEPENDENCY`(exit 7): `bw` 또는 `sops`(3.9 이상)가 없다. 흐름 5대로 설치를 제안한다.
 - `UNSUPPORTED_FILE`/`USAGE`/`NOT_GIT_REPO`/`ALREADY_INITIALIZED`(exit 2): `error.message`와 `error.hint`를 그대로 전달한다.
 - 그 밖의 오류는 `error.code`, `error.message`, `error.hint`만 전달한다. 원인 파악을 위해 비밀값 파일을 열지 않는다.
 
