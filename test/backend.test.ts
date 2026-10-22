@@ -152,3 +152,16 @@ test('sops backend trims whitespace around the stored key', async () => {
   await be.write('.env', Buffer.from('A=1\n'));
   expect((await be.read('.env'))?.content.toString()).toBe('A=1\n');
 });
+
+test('vault backend rejects non-UTF-8 content (UTF-16LE with BOM) and NUL bytes', async () => {
+  const vault = new FakeVault({ state: 'unlocked' });
+  const be = new VaultBackend(vault, cfg());
+  const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('A=secretvalue\r\n', 'utf16le')]);
+  const err = await be.write('.env', utf16).catch((e) => e);
+  expect(err).toMatchObject({ code: 'UNSUPPORTED_FILE' });
+  expect(String(err.message) + String(err.hint)).not.toContain('secretvalue');
+  expect(String(err.hint)).toContain('--encrypt');
+  await expect(be.write('.env', Buffer.from([0x41, 0x3d, 0x00, 0x31]))).rejects.toMatchObject({ code: 'UNSUPPORTED_FILE' });
+  await expect(be.write('.env', Buffer.from([0x41, 0x3d, 0xc3]))).rejects.toMatchObject({ code: 'UNSUPPORTED_FILE' });
+  expect(vault.notes.size).toBe(0);
+});

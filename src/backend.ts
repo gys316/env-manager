@@ -38,6 +38,14 @@ export class VaultBackend implements Backend {
   }
 
   async write(p: string, content: Buffer): Promise<{ version: string }> {
+    // 노트는 문자열로만 저장되므로 UTF-8로 그대로 되돌릴 수 없는 내용(UTF-16, 바이너리)은 깨진다.
+    if (content.includes(0) || !Buffer.from(content.toString('utf8'), 'utf8').equals(content)) {
+      throw new EnvsyncError(
+        'UNSUPPORTED_FILE',
+        `${p}: UTF-8 텍스트가 아니라 Bitwarden 노트에 그대로 저장할 수 없습니다.`,
+        '파일을 UTF-8로 다시 저장하거나(PowerShell 5.1의 > 리디렉션은 UTF-16으로 저장합니다), envsync init --encrypt 로 sops 모드를 사용하세요.',
+      );
+    }
     if (content.length > MAX_NOTE_BYTES) {
       throw new EnvsyncError(
         'NOTE_TOO_LARGE',
