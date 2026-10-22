@@ -9,7 +9,7 @@ export type FileFormat = 'dotenv' | 'yaml';
 const SKIP_DIRS = new Set(['node_modules', '.git', '.venv', 'venv', 'dist', 'build', 'target', 'vendor', '.next']);
 /** 이름의 `.`로 나뉜 구간 중 하나라도 이것이면 예시 파일로 보고 제외한다(`.env.local.example` 등). */
 const EXAMPLE_SEGMENTS = new Set(['example', 'sample', 'template']);
-const EXCLUDED_EXT = ['.enc', '.envsync-backup'];
+const EXCLUDED_EXT = ['.enc'];
 
 export function fileFormat(relPath: string): FileFormat | null {
   const base = relPath.split('/').pop() ?? relPath;
@@ -58,7 +58,7 @@ export async function detectFiles(runner: Runner, root: string): Promise<string[
   const yaml: string[] = [];
   for (const rel of await listFiles(runner, root)) {
     const base = rel.split('/').pop() as string;
-    if (isExampleName(base) || EXCLUDED_EXT.some((x) => base.endsWith(x))) continue;
+    if (isExampleName(base) || base.includes('.envsync-backup') || EXCLUDED_EXT.some((x) => base.endsWith(x))) continue;
     const fmt = fileFormat(rel);
     if (fmt === 'dotenv') result.push(rel);
     else if (fmt === 'yaml') yaml.push(rel);

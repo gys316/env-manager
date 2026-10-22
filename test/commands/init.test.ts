@@ -28,11 +28,16 @@ describe('init', () => {
     vault.status = async () => {
       throw new Error('vault touched');
     };
-    const { config } = await init(deps({ vault }), root, { encrypt: false, yes: true });
+    const io = new MemoryIo();
+    const { config } = await init(deps({ vault, io }), root, { encrypt: false, yes: true });
     expect(config).toEqual({ version: 1, repo: 'kys/app', mode: 'vault', files: ['.env', 'backend/.env.local'] });
     expect(await loadConfig(root)).toEqual(config);
+    expect(io.messages.join('\n')).toContain('커밋하세요: .envsync.config, .gitignore');
+    expect(io.messages.join('\n')).not.toContain('.gitattributes');
     expect(await isIgnored(spawnRunner, root, 'backend/.env.local')).toBe(true);
     expect(await isIgnored(spawnRunner, root, 'x.envsync-backup')).toBe(true);
+    expect(await isIgnored(spawnRunner, root, 'x.envsync-backup-20261022070503')).toBe(true);
+    expect(await readFile(path.join(root, '.gitignore'), 'utf8')).toContain('*.envsync-backup*');
     expect(await isIgnored(spawnRunner, root, 'x.enc.tmp')).toBe(true);
   });
 
@@ -47,6 +52,7 @@ describe('init', () => {
     expect(config.sops?.recipient).toBe(await recipientOf(note!.notes));
     expect(await readFile(path.join(root, '.gitattributes'), 'utf8')).toContain('*.enc -text');
     expect(io.messages.join('\n')).not.toContain(note!.notes);
+    expect(io.messages.join('\n')).toContain('커밋하세요: .envsync.config, .gitignore, .gitattributes');
   });
 
   test('--encrypt reuses an existing key note', async () => {

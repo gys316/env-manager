@@ -108,6 +108,9 @@ async function appendLines(file: string, header: string | null, lines: string[])
   await writeFile(file, text);
 }
 
+/** 백업 파일 무시 패턴. 시각이 붙은 백업(`<파일>.envsync-backup-<시각>`)도 덮는다. */
+export const BACKUP_PATTERN = '*.envsync-backup*';
+
 export async function ensureIgnored(runner: Runner, root: string, patterns: string[]): Promise<string[]> {
   const gitignore = path.join(root, '.gitignore');
   const existingLines = (await readIfExists(gitignore)).split(/\r?\n/).map((l) => l.trim());

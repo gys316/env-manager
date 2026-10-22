@@ -1,9 +1,12 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { pull } from '../../src/commands/pull.js';
 import { push } from '../../src/commands/push.js';
-import { FakeVault } from '../fakes.js';
+import { SopsBackend } from '../../src/backend.js';
+import { spawnRunner } from '../../src/exec.js';
+import { isIgnored } from '../../src/repo.js';
+import { FakeSops, FakeVault } from '../fakes.js';
 import { makeCtx } from './ctx.js';
 
 const seed = async (files: Record<string, string>) => {
@@ -58,5 +61,63 @@ describe('pull', () => {
     await pull(b.ctx, { force: false });
     await writeFile(join(b.root, '.env'), 'A=2');
     expect((await push(b.ctx, { yes: true, force: false }))[0].status).toBe('pushed');
+  });
+});
+
+describe('pull safety', () => {
+  test('restored plaintext not covered by .gitignore gets added and warned', async () => {
+    const vault = await seed({ 'backend/.env': 'A=1' });
+    const b = await makeCtx({ files: ['backend/.env'], local: {}, vault });
+    await pull(b.ctx, { force: false });
+    expect(await isIgnored(spawnRunner, b.root, 'backend/.env')).toBe(true);
+    expect(await readFile(join(b.root, '.gitignore'), 'utf8')).toContain('/backend/.env');
+    expect(b.io.messages.join('\n')).toContain('.gitignore');
+  });
+
+  test('already ignored file: .gitignore untouched, no warning', async () => {
+    const vault = await seed({ '.env': 'A=1' });
+    const b = await makeCtx({ files: ['.env'], local: { '.gitignore': '.env\n' }, vault });
+    await pull(b.ctx, { force: false });
+    expect(await readFile(join(b.root, '.gitignore'), 'utf8')).toBe('.env\n');
+    expect(b.io.messages.join('\n')).not.toContain('.gitignore');
+  });
+
+  test('--force keeps a differing existing backup and writes a timestamped one', async () => {
+    const vault = await seed({ '.env': 'A=1' });
+    const b = await makeCtx({ files: ['.env'], local: { '.env': 'A=9', '.env.envsync-backup': 'A=old' }, vault });
+    const now = new Date(2026, 9, 22, 7, 5, 3);
+    await pull(b.ctx, { force: true, now });
+    expect(await readFile(join(b.root, '.env.envsync-backup'), 'utf8')).toBe('A=old');
+    expect(await readFile(join(b.root, '.env.envsync-backup-20261022070503'), 'utf8')).toBe('A=9');
+    expect(await readFile(join(b.root, '.env'), 'utf8')).toBe('A=1');
+    expect(await readFile(join(b.root, '.gitignore'), 'utf8')).toContain('*.envsync-backup*');
+    expect(await isIgnored(spawnRunner, b.root, '.env.envsync-backup-20261022070503')).toBe(true);
+    expect(b.io.messages.join('\n')).toContain('.env.envsync-backup-20261022070503');
+  });
+
+  test('--force with an identical existing backup reuses it', async () => {
+    const vault = await seed({ '.env': 'A=1' });
+    const b = await makeCtx({ files: ['.env'], local: { '.env': 'A=9', '.env.envsync-backup': 'A=9' }, vault });
+    await pull(b.ctx, { force: true });
+    expect(await readFile(join(b.root, '.env.envsync-backup'), 'utf8')).toBe('A=9');
+    expect((await readdir(b.root)).filter((f) => f.startsWith('.env.envsync-backup-'))).toEqual([]);
+  });
+
+  test.skipIf(process.platform === 'win32')('restored plaintext is written with mode 0600', async () => {
+    const vault = await seed({ '.env': 'A=1' });
+    const b = await makeCtx({ files: ['.env'], local: {}, vault });
+    await pull(b.ctx, { force: false });
+    expect((await stat(join(b.root, '.env'))).mode & 0o777).toBe(0o600);
+  });
+
+  test('sops: .enc in binary format without a formats entry is retried as binary and warned', async () => {
+    const b = await makeCtx({ files: ['.env'], local: {}, config: { mode: 'sops', sops: { recipient: 'age1fake' } } });
+    await b.vault.upsertNote('envsync:kys/app:age-key', 'AGE-SECRET-KEY-FAKE');
+    b.ctx.backend = new SopsBackend(b.root, b.vault, new FakeSops({ strictFormat: true }), b.ctx.config, async () => {});
+    await writeFile(join(b.root, '.env.enc'), 'FAKE:binary:' + Buffer.from('A=1\n').toString('base64'));
+    const r = await pull(b.ctx, { force: false });
+    expect(r[0]).toMatchObject({ status: 'pulled' });
+    expect(r[0].warning).toContain('.envsync.config');
+    expect(await readFile(join(b.root, '.env'), 'utf8')).toBe('A=1\n');
   });
 });

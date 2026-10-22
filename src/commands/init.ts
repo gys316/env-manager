@@ -4,7 +4,7 @@ import type { Deps } from '../context.js';
 import { detectFiles } from '../detect.js';
 import { EnvsyncError } from '../errors.js';
 import { generateAgeKey, recipientOf } from '../keys.js';
-import { ensureGitattributes, ensureIgnored, findRepoRoot, isTracked, originUrl, parseRemote } from '../repo.js';
+import { BACKUP_PATTERN, ensureGitattributes, ensureIgnored, findRepoRoot, isTracked, originUrl, parseRemote } from '../repo.js';
 import { ensureUnlocked } from '../session.js';
 
 /** `a/b` 형태(슬래시 1개 이상, 공백 없음, 빈 구간 없음)만 허용한다. */
@@ -89,9 +89,12 @@ export async function init(
     await ensureGitattributes(root, '*.enc -text');
   }
 
+  // 평문이 커밋되지 않도록 설정 파일보다 무시 규칙을 먼저 쓴다.
+  const ignored = await ensureIgnored(runner, root, [...files, BACKUP_PATTERN, '*.enc.tmp']);
   await saveConfig(root, config);
-  const ignored = await ensureIgnored(runner, root, [...files, '*.envsync-backup', '*.enc.tmp']);
   const trackedWarnings = await warnTracked(deps, root, files);
   io.info(`초기화 완료: ${config.mode} 모드, 파일 ${files.length}개`);
+  const toCommit = ['.envsync.config', '.gitignore', ...(config.mode === 'sops' ? ['.gitattributes'] : [])];
+  io.info(`다른 PC에서도 쓸 수 있도록 다음 파일을 커밋하세요: ${toCommit.join(', ')}`);
   return { config, ignored, trackedWarnings };
 }

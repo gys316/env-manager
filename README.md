@@ -41,9 +41,13 @@ npm install && npm run build && npm link
 bw login
 envsync init          # .env 계열과 .yml/.yaml 파일을 자동으로 찾아 설정 파일을 만듭니다
 envsync push          # Bitwarden에 올립니다
+git add .envsync.config .gitignore
+git commit -m "chore: envsync"
 ```
 
-SOPS 모드로 쓰려면 `init`에 `--encrypt`를 붙입니다. push하면 원본 옆에 `<파일>.enc`가 생기므로 이 파일을 커밋하세요.
+`.envsync.config`와 `.gitignore` 변경은 꼭 커밋하세요. 새 PC에서 클론한 레포에 `.envsync.config`가 없으면 `pull`이 무엇을 받아야 할지 모릅니다.
+
+SOPS 모드로 쓰려면 `init`에 `--encrypt`를 붙입니다. push하면 원본 옆에 `<파일>.enc`가 생기므로 이 파일을 커밋하세요. push가 어떤 파일을 `binary` 형식으로 바꾸면 `.envsync.config`(`formats`)도 바뀌므로 `.enc`와 함께 커밋해야 합니다(push가 커밋할 파일 목록을 알려 줍니다).
 
 ```
 envsync init --encrypt
@@ -55,7 +59,8 @@ git commit -m "chore: envsync"
 `init`이 하는 일:
 
 - `.envsync.config`(JSON, 비밀값 없음, 커밋 대상)를 만듭니다.
-- 관리하는 파일, `*.envsync-backup`, `*.enc.tmp`를 `.gitignore`에 추가합니다.
+- 관리하는 파일, `*.envsync-backup*`, `*.enc.tmp`를 `.gitignore`에 추가합니다.
+- 끝나면 커밋할 파일(`.envsync.config`, `.gitignore`, SOPS 모드는 `.gitattributes`까지)을 알려 줍니다.
 - SOPS 모드이면 `.gitattributes`에 `*.enc -text`를 추가하고, age 키를 만들어 Bitwarden에 저장합니다(이미 있으면 재사용).
 - 관리 대상 파일이 이미 git에 추적 중이면 `git rm --cached <파일>`을 실행하라고 경고합니다.
 
@@ -68,7 +73,7 @@ bw login
 envsync pull
 ```
 
-잠금이 풀려 있지 않으면 터미널에서 마스터 비밀번호를 묻습니다(입력은 화면에 표시되지 않습니다). 하위 폴더에서 실행해도 레포 루트 기준으로 동작하고, 받을 파일의 상위 폴더가 없으면 만들어 줍니다.
+잠금이 풀려 있지 않으면 터미널에서 마스터 비밀번호를 묻습니다(입력은 화면에 표시되지 않습니다). 하위 폴더에서 실행해도 레포 루트 기준으로 동작하고, 받을 파일의 상위 폴더가 없으면 만들어 줍니다. 받은 파일이 레포의 `.gitignore`에 없으면 추가하고 알려 주니, 그 `.gitignore` 변경을 커밋하세요.
 
 ## 모드 비교
 
@@ -106,7 +111,7 @@ envsync [전역 옵션] <명령>
 |---|---|
 | `--yes` | 확인 없이 진행합니다. |
 | `--json` | stdout에 JSON 한 줄만 출력합니다(사람이 읽는 글은 stderr). 항상 비대화형으로 동작하므로 비밀번호나 확인을 묻지 않습니다. |
-| `--force` | `push`는 충돌 검사를 건너뛰고 덮어쓰며, `pull`은 로컬 파일을 `<파일>.envsync-backup`으로 백업한 뒤 덮어씁니다. |
+| `--force` | `push`는 충돌 검사를 건너뛰고 덮어쓰며, `pull`은 로컬 파일을 `<파일>.envsync-backup`으로 백업한 뒤 덮어씁니다(이미 다른 내용의 백업이 있으면 `<파일>.envsync-backup-<YYYYMMDDHHmmss>`에 새로 남깁니다). |
 
 출력에는 파일 경로와 키 이름(`+추가`, `~변경`, `-삭제`)까지만 나오고 값은 나오지 않습니다.
 
@@ -152,7 +157,13 @@ vault 모드는 파일당 7000바이트까지입니다. `envsync init --encrypt`
 마지막 동기화 이후 원격이 바뀌었거나, 동기화 기록 없이 내용이 다릅니다. 먼저 `envsync pull`로 최신을 받아 확인한 뒤 다시 push하세요. 로컬이 맞다고 확신할 때만 `envsync push --force`를 쓰세요.
 
 **`PULL_SKIPPED`**
-로컬 파일이 Bitwarden 내용과 달라 건너뛴 파일이 있다는 뜻입니다. 어떤 키가 다른지 출력을 확인하고, 원격으로 덮어써도 되면 `envsync pull --force`를 실행하세요. 기존 파일은 `<파일>.envsync-backup`으로 남습니다.
+로컬 파일이 Bitwarden 내용과 달라 건너뛴 파일이 있다는 뜻입니다. 어떤 키가 다른지 출력을 확인하고, 원격으로 덮어써도 되면 `envsync pull --force`를 실행하세요. 기존 파일은 `<파일>.envsync-backup`으로 남습니다(이전 백업과 내용이 다르면 `<파일>.envsync-backup-<시각>`).
+
+**UTF-8 텍스트가 아님 (`UNSUPPORTED_FILE`)**
+vault 모드는 파일을 텍스트 노트로 저장하므로 UTF-8만 받습니다. Windows PowerShell 5.1의 `>` 리디렉션은 UTF-16으로 저장하니, 편집기에서 UTF-8로 다시 저장하거나 `envsync init --encrypt`(SOPS 모드)를 쓰세요.
+
+**`.enc` 복호화 실패 (`SOPS_ERROR`)**
+다른 PC에서 push가 `binary`로 바꾼 `.envsync.config`를 커밋하지 않았으면 형식이 맞지 않습니다. pull은 이 경우 `binary`로 다시 시도하고 경고합니다. 그래도 실패하면 `.envsync.config`가 `.enc`와 함께 커밋되었는지, Bitwarden의 age 키가 이 레포의 키인지 확인하세요.
 
 **binary 대체 경고**
 SOPS가 형식을 그대로 보존하지 못해 `binary`로 암호화했다는 경고입니다. 동작에는 문제가 없지만 git diff에 키 이름이 보이지 않습니다.

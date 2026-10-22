@@ -7,7 +7,7 @@ test('detects env files and only ignored yaml', async () => {
   const root = await makeTempRepo();
   await writeFiles(root, {
     '.env': 'A=1', '.env.local': 'B=2', 'backend/.env.production': 'C=3',
-    '.env.example': 'A=', 'node_modules/x/.env': 'Z=1', '.env.enc': 'x', '.env.envsync-backup': 'x',
+    '.env.example': 'A=', 'node_modules/x/.env': 'Z=1', '.env.enc': 'x', '.env.envsync-backup': 'x', '.env.envsync-backup-20261022070503': 'x',
     'config/application-local.yml': 'db: {password: x}', 'docker-compose.yml': 'services: {}',
     '.gitignore': 'config/application-local.yml\n',
   });

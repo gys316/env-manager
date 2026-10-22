@@ -9,7 +9,7 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 
 ## 절대 규칙
 
-1. **`.env`, YAML 비밀값 파일, `.enc` 복호화 결과, `bw get` 출력을 읽거나 출력하지 않는다.** Read/cat/type 등으로 열지 않는다. 상태 확인은 `envsync status --json`으로만 한다.
+1. **`.env`, YAML 비밀값 파일, 백업 파일(`*.envsync-backup*`), `.enc` 복호화 결과, `bw get` 출력을 읽거나 출력하지 않는다.** Read/cat/type 등으로 열지 않는다. 상태 확인은 `envsync status --json`으로만 한다.
 2. **마스터 비밀번호와 세션 토큰(`BW_SESSION`)을 요청하거나 받지 않는다.** 사용자가 대화에 붙여 넣어도 사용하지 않는다. `bw unlock`을 직접 실행하지 않는다.
 3. **`push`, `pull --force`, `--yes`는 사용자에게 변경 요약(키 이름)을 보여주고 승인을 받은 뒤에만 실행한다.** 요약은 `status --json`의 파일별 상태나 `added`/`changed`/`removed` 키 이름으로 만든다. 값은 보여주지 않는다.
 4. 항상 `--json`으로 실행하고 `ok`와 `error.code`로 판단한다. `--json`은 항상 비대화형이라 프롬프트가 뜨지 않는다.
@@ -17,15 +17,16 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 ## 흐름
 
 1. **파일이 없어 앱이 실행되지 않을 때**: `envsync status --json` 실행. `remote-only`(로컬에 없고 원격에 있음)인 파일이 있으면 `envsync pull --json`을 실행한다(로컬 파일이 없을 때 pull은 덮어쓰기가 아니므로 승인 없이 실행해도 된다). `missing`(양쪽 다 없음)이면 사용자에게 다른 PC에서 push가 필요하다고 알린다. `.envsync.config`가 없으면(`NOT_INITIALIZED`) 사용자에게 `envsync init`을 안내한다.
-2. **env를 바꾼 뒤 반영할 때**: 먼저 `envsync push --json`(`--yes` 없이)을 실행한다. 아무것도 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)로 끝나며, `files`에 올릴 파일별 `added`/`changed`/`removed` 키 이름(또는 `opaque`)이 담긴다. 이 키 이름을 사용자에게 보여주고 승인받은 뒤에만 `envsync push --yes --json`을 실행한다. push 결과의 키 이름을 요약해서 보고한다. 바뀐 파일이 없으면 첫 실행이 그대로 `ok: true`로 끝난다. SOPS 모드이면 생성된 `<파일>.enc`를 커밋하라고 안내한다.
+2. **env를 바꾼 뒤 반영할 때**: 먼저 `envsync push --json`(`--yes` 없이)을 실행한다. 아무것도 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)로 끝나며, `files`에 올릴 파일별 `added`/`changed`/`removed` 키 이름(또는 `opaque`)이 담긴다. 이 키 이름을 사용자에게 보여주고 승인받은 뒤에만 `envsync push --yes --json`을 실행한다. push 결과의 키 이름을 요약해서 보고한다. 바뀐 파일이 없으면 첫 실행이 그대로 `ok: true`로 끝난다. SOPS 모드이면 생성된 `<파일>.enc`를 커밋하라고 안내한다. push가 `.envsync.config`가 바뀌었다고 알리면(binary 형식 전환) `.envsync.config`도 `.enc`와 함께 커밋하라고 안내한다. pull이 `.gitignore`에 파일을 추가했다고 경고하면 `.gitignore` 변경을 커밋하라고 안내한다.
 3. 결과는 키 이름과 경로까지만 사용자에게 전달한다.
 
 ## 오류 처리
 
 - `VAULT_LOCKED`(exit 4) / `NOT_LOGGED_IN`(exit 3): 비밀번호나 토큰을 요청하지 말고 사용자에게 안내한다. "별도 터미널에서 `envsync pull`을 직접 실행해 비밀번호를 입력하세요", 또는 "`BW_SESSION`을 설정한 셸에서 Claude Code를 다시 시작하세요(PowerShell: `$env:BW_SESSION = (bw unlock --raw)`, bash/zsh: `export BW_SESSION=$(bw unlock --raw)`)". `NOT_LOGGED_IN`이면 `bw login`이 먼저 필요하다. `bw unlock`은 직접 실행하지 않는다.
 - `CONFLICT`(exit 5): 먼저 `pull`을 제안한다(`pull`에서 `PULL_SKIPPED`가 나올 수 있다). 사용자가 로컬이 맞다고 명시적으로 승인한 경우에만 `push --force --yes`를 쓴다.
-- `PULL_SKIPPED`(exit 6): 결과 `files`에서 `status: "skipped"`인 파일의 다른 키 이름(`added`/`changed`/`removed`)을 보여주고, `pull --force`(기존 파일은 `<파일>.envsync-backup`으로 백업됨)를 할지 묻는다. 승인 후에만 실행한다.
+- `PULL_SKIPPED`(exit 6): 결과 `files`에서 `status: "skipped"`인 파일의 다른 키 이름(`added`/`changed`/`removed`)을 보여주고, `pull --force`(기존 파일은 `<파일>.envsync-backup`으로 백업됨. 다른 내용의 백업이 이미 있으면 `<파일>.envsync-backup-<시각>`)를 할지 묻는다. 승인 후에만 실행한다.
 - `CONFIRMATION_REQUIRED`(exit 8): 아무것도 바뀌지 않았다. `files`의 키 이름을 사용자에게 보여주고 승인받은 뒤 `--yes`를 붙여 다시 실행한다.
+- `UNSUPPORTED_FILE`(exit 2)로 UTF-8이 아니라고 하면: 사용자에게 파일을 UTF-8로 다시 저장하거나 `envsync init --encrypt`를 쓰라고 안내한다. 파일을 직접 열어 변환하지 않는다.
 - `NOTE_TOO_LARGE`(exit 9): vault 모드의 7000바이트 제한. 사용자에게 `envsync init --encrypt`(SOPS 모드)를 안내한다.
 - `MISSING_DEPENDENCY`(exit 7): `bw` 또는 `sops`(3.9 이상) 설치를 안내한다.
 - `UNSUPPORTED_FILE`/`USAGE`/`NOT_GIT_REPO`/`ALREADY_INITIALIZED`(exit 2): `error.message`와 `error.hint`를 그대로 전달한다.
