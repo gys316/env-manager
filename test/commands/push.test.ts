@@ -92,6 +92,13 @@ describe('push', () => {
     expect(out).not.toContain('supersecret');
   });
 
+  test('multi-line PEM value never leaks fragments into the summary', async () => {
+    const a = await makeCtx({ files: ['.env'], local: { '.env': "CERT='line1\nMIIsecretline==\nend'\n" } });
+    const r = await push(a.ctx, opts);
+    expect(r[0]).toMatchObject({ added: ['CERT'] });
+    expect(JSON.stringify(r) + a.io.messages.join('\n')).not.toContain('MIIsecretline');
+  });
+
   test('binary-format file is opaque, no key names printed', async () => {
     const a = await makeCtx({ files: ['.env'], local: { '.env': 'SECRET_TOKEN=x' }, config: { formats: { '.env': 'binary' } } });
     const r = await push(a.ctx, opts);

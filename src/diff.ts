@@ -9,7 +9,21 @@ function decode(buf: Buffer): string {
   return text;
 }
 
-/** dotenv 형식 파싱. 중복 키는 마지막 값이 이긴다. */
+/** 해석할 수 없는 dotenv. 메시지에 파일 내용을 넣지 않는다. */
+class DotenvParseError extends Error {
+  constructor() {
+    super('dotenv 파싱 실패');
+  }
+}
+
+const ASSIGNMENT = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*=(.*)$/;
+const QUOTES = new Set(['"', "'", '`']);
+
+/**
+ * dotenv 형식 파싱. 중복 키는 마지막 값이 이긴다.
+ * 주석·빈 줄·`KEY=` 대입(따옴표 안의 여러 줄 값 포함) 외의 줄이 하나라도 있거나 따옴표가 닫히지 않으면
+ * 값 조각이 키 이름으로 새지 않도록 예외를 던진다(diffKeys는 opaque로 처리).
+ */
 export function parseDotenv(input: string): Map<string, string> {
   const text = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const lines = text.split('\n');
@@ -17,24 +31,26 @@ export function parseDotenv(input: string): Map<string, string> {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line === '' || line.startsWith('#')) continue;
-    const m = /^(?:export\s+)?([^\s=#]+)\s*=(.*)$/.exec(line);
-    if (!m) continue;
+    const m = ASSIGNMENT.exec(lines[i].trimStart());
+    // `KEY==...`는 base64 조각(PEM 끝 줄 등)일 가능성이 커서 해석하지 않는다.
+    if (!m || m[2].startsWith('=')) throw new DotenvParseError();
     const key = m[1];
     let rest = m[2].trimStart();
     let value: string;
-    if (rest.startsWith('"')) {
+    const q = rest[0];
+    if (q !== undefined && QUOTES.has(q)) {
       let body = rest.slice(1);
-      let end = findClosingQuote(body);
+      let end = findClosingQuote(body, q);
       while (end < 0 && i + 1 < lines.length) {
         i++;
         body += '\n' + lines[i];
-        end = findClosingQuote(body);
+        end = findClosingQuote(body, q);
       }
-      const raw = end < 0 ? body : body.slice(0, end);
-      value = raw.replace(/\\(["\\nr])/g, (_, c: string) => (c === 'n' ? '\n' : c === 'r' ? '\r' : c));
-    } else if (rest.startsWith("'")) {
-      const end = rest.indexOf("'", 1);
-      value = end < 0 ? rest.slice(1) : rest.slice(1, end);
+      if (end < 0) throw new DotenvParseError();
+      const tail = body.slice(end + 1).trim();
+      if (tail !== '' && !tail.startsWith('#')) throw new DotenvParseError();
+      const raw = body.slice(0, end);
+      value = q === '"' ? raw.replace(/\\(["\\nr])/g, (_, c: string) => (c === 'n' ? '\n' : c === 'r' ? '\r' : c)) : raw;
     } else {
       const hash = rest.search(/\s#/);
       if (hash >= 0) rest = rest.slice(0, hash);
@@ -45,10 +61,11 @@ export function parseDotenv(input: string): Map<string, string> {
   return out;
 }
 
-function findClosingQuote(s: string): number {
+/** 큰따옴표만 백슬래시 이스케이프를 인정한다. */
+function findClosingQuote(s: string, q: string): number {
   for (let i = 0; i < s.length; i++) {
-    if (s[i] === '\\') i++;
-    else if (s[i] === '"') return i;
+    if (q === '"' && s[i] === '\\') i++;
+    else if (s[i] === q) return i;
   }
   return -1;
 }
