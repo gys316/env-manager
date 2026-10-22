@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { configExists, loadConfig, saveConfig } from '../src/config.js';
+import { configExists, isSafeRelPath, loadConfig, saveConfig } from '../src/config.js';
 
 const tmp = () => mkdtemp(join(tmpdir(), 'c'));
 const raw = async (obj: unknown) => {
@@ -10,6 +10,30 @@ const raw = async (obj: unknown) => {
   await writeFile(join(root, '.envsync.config'), typeof obj === 'string' ? obj : JSON.stringify(obj));
   return root;
 };
+
+describe('isSafeRelPath', () => {
+  test.each(['.env', 'backend/.env.local', 'config/app-local.yml'])('accepts %s', (p) => {
+    expect(isSafeRelPath(p)).toBe(true);
+  });
+  test.each(['', '../x', 'a/../b', '../../.bashrc', '/etc/passwd', 'C:/x', 'c:x', 'a\\b', './a', 'a/./b', 'a//b', 'a/', '.', '..'])(
+    'rejects %j',
+    (p) => {
+      expect(isSafeRelPath(p)).toBe(false);
+    },
+  );
+  test.each(['../../.bashrc', '/etc/x', 'C:/x', 'a\\b', 'a//b', ''])('loadConfig rejects files entry %j', async (p) => {
+    const root = await raw({ version: 1, repo: 'a/b', mode: 'vault', files: ['.env', p] });
+    await expect(loadConfig(root)).rejects.toMatchObject({ code: 'USAGE', message: expect.stringContaining(p === '' ? 'files' : p) });
+  });
+  test('loadConfig rejects unsafe formats key', async () => {
+    const root = await raw({ version: 1, repo: 'a/b', mode: 'vault', files: [], formats: { '../x': 'binary' } });
+    await expect(loadConfig(root)).rejects.toMatchObject({ code: 'USAGE', message: expect.stringContaining('../x') });
+  });
+  test('loadConfig accepts safe entries', async () => {
+    const root = await raw({ version: 1, repo: 'a/b', mode: 'vault', files: ['.env', 'backend/.env.local'], formats: { 'config/app-local.yml': 'binary' } });
+    expect((await loadConfig(root)).files).toHaveLength(2);
+  });
+});
 
 describe('config', () => {
   test('round-trips config and normalizes files', async () => {

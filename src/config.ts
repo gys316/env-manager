@@ -20,12 +20,22 @@ const bad = (why: string) =>
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 
+export function isSafeRelPath(p: string): boolean {
+  if (p === '' || p.includes('\\') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) return false;
+  return p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
+
+function checkPath(p: string, where: string): void {
+  if (!isSafeRelPath(p)) throw bad(`${where}에 안전하지 않은 경로가 있습니다: "${p}"`);
+}
+
 function validate(v: unknown): Config {
   if (!isObj(v)) throw bad('최상위가 객체가 아닙니다');
   if (v.version !== 1) throw bad('version은 1이어야 합니다');
   if (!nonEmpty(v.repo)) throw bad('repo가 비어 있습니다');
   if (v.mode !== 'vault' && v.mode !== 'sops') throw bad("mode는 'vault' 또는 'sops'여야 합니다");
   if (!Array.isArray(v.files) || !v.files.every((f) => typeof f === 'string')) throw bad('files는 문자열 배열이어야 합니다');
+  for (const f of v.files as string[]) checkPath(f, 'files');
   const config: Config = { version: 1, repo: v.repo, mode: v.mode, files: v.files as string[] };
   if (v.sops !== undefined) {
     if (!isObj(v.sops) || !nonEmpty(v.sops.recipient)) throw bad('sops.recipient가 비어 있습니다');
@@ -36,6 +46,7 @@ function validate(v: unknown): Config {
     if (!isObj(v.formats) || !Object.values(v.formats).every((x) => x === 'binary')) {
       throw bad("formats의 값은 'binary'만 가능합니다");
     }
+    for (const k of Object.keys(v.formats)) checkPath(k, 'formats');
     config.formats = { ...(v.formats as Record<string, 'binary'>) };
   }
   return config;
