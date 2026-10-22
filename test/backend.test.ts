@@ -145,3 +145,10 @@ test('sops backend: key fetched once and cached', async () => {
   await be.read('.env');
   expect(finds).toBe(1);
 });
+
+test('sops backend trims whitespace around the stored key', async () => {
+  const { be, vault } = await sopsSetup({ '.env': 'A=1\n' }, new FakeSops(), sopsCfg(), false);
+  await vault.upsertNote('envsync:kys/app:age-key', 'AGE-SECRET-KEY-FAKE\r\n');
+  await be.write('.env', Buffer.from('A=1\n'));
+  expect((await be.read('.env'))?.content.toString()).toBe('A=1\n');
+});

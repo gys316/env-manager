@@ -60,6 +60,38 @@ describe('init', () => {
     expect((await vault.findNote(keyNoteName('kys/app')))!.revisionDate).toBe(before);
   });
 
+  test('--encrypt tolerates trailing whitespace/newline in a pasted key note', async () => {
+    const root = await tmpRepoWith({ '.env': 'A=1' }, ORIGIN);
+    const vault = new FakeVault({ state: 'unlocked' });
+    const key = await generateAgeKey();
+    await vault.upsertNote(keyNoteName('kys/app'), `${key.identity}  \r\n`);
+    const { config } = await init(deps({ vault }), root, { encrypt: true, yes: true });
+    expect(config.sops?.recipient).toBe(key.recipient);
+  });
+
+  test('--encrypt with a malformed key note fails without echoing the key', async () => {
+    const root = await tmpRepoWith({ '.env': 'A=1' }, ORIGIN);
+    const vault = new FakeVault({ state: 'unlocked' });
+    const key = await generateAgeKey();
+    await vault.upsertNote(keyNoteName('kys/app'), key.identity.slice(0, -3) + 'QQQ');
+    const io = new MemoryIo();
+    const err = await init(deps({ vault, io }), root, { encrypt: true, yes: true }).catch((e) => e);
+    expect(err).toMatchObject({ code: 'BW_ERROR' });
+    expect(`${err.message} ${err.hint} ${io.messages.join(' ')}`).not.toContain(key.identity.slice(0, 24));
+  });
+
+  test('--encrypt syncs the vault before looking up the existing key', async () => {
+    const root = await tmpRepoWith({ '.env': 'A=1' }, ORIGIN);
+    const vault = new FakeVault({ state: 'unlocked' });
+    const key = await generateAgeKey();
+    // 캐시가 낡아 sync 전에는 키 항목이 보이지 않는 상황
+    vault.sync = async () => {
+      await vault.upsertNote(keyNoteName('kys/app'), key.identity);
+    };
+    const { config } = await init(deps({ vault }), root, { encrypt: true, yes: true });
+    expect(config.sops?.recipient).toBe(key.recipient);
+  });
+
   test('no origin: non-interactive -> USAGE; --repo works; invalid --repo -> USAGE', async () => {
     const root = await tmpRepoWith({ '.env': 'A=1' });
     const ni = new MemoryIo({ interactive: false });

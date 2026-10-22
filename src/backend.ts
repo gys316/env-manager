@@ -79,10 +79,11 @@ export class SopsBackend implements Backend {
   private async key(): Promise<string> {
     if (this.identity) return this.identity;
     const note = await this.vault.findNote(keyNoteName(this.config.repo));
-    if (!note || !note.notes) {
+    const identity = note?.notes.trim() ?? '';
+    if (identity === '') {
       throw new EnvsyncError('NOT_INITIALIZED', 'Bitwarden에 age 개인키 항목이 없습니다.', 'envsync init --encrypt 로 키를 만들거나 다른 기기에서 키를 옮겨 오세요.');
     }
-    return (this.identity = note.notes);
+    return (this.identity = identity);
   }
 
   private async readEnc(p: string): Promise<Buffer | null> {

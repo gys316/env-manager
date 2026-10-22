@@ -71,11 +71,13 @@ export async function init(
   if (opts.encrypt) {
     await sops.checkVersion();
     await ensureUnlocked(vault, io);
+    // 낡은 로컬 캐시로 기존 키를 못 찾으면 두 번째 키가 생겨 DUPLICATE_ITEM이 된다.
+    await vault.sync();
     const name = keyNoteName(repo);
     const existing = await vault.findNote(name);
     let recipient: string;
-    if (existing && existing.notes) {
-      recipient = await recipientOf(existing.notes);
+    if (existing && existing.notes.trim() !== '') {
+      recipient = await recipientOf(existing.notes.trim());
       io.info('Bitwarden에 있는 기존 age 키를 재사용합니다.');
     } else {
       const key = await generateAgeKey();

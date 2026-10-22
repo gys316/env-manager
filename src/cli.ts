@@ -7,7 +7,7 @@ import { pull } from './commands/pull.js';
 import { push } from './commands/push.js';
 import { status } from './commands/status.js';
 import { createContext, type Deps, type FileResult } from './context.js';
-import { EnvsyncError, exitCodeFor, type ErrorCode } from './errors.js';
+import { describeError, exitCodeFor } from './errors.js';
 import { resolveExecutable, spawnRunner } from './exec.js';
 import { createTerminalIo, type Io } from './io.js';
 import { SopsCli } from './sops.js';
@@ -59,19 +59,8 @@ async function execute(command: string, g: Globals, fn: (deps: Deps, io: Io) => 
     else for (const f of files) io.info(fileLine(f));
     process.exitCode = 0;
   } catch (e) {
-    let code: ErrorCode = 'UNEXPECTED';
-    let message: string;
-    let hint: string | undefined;
-    let files: unknown[] = [];
-    if (e instanceof EnvsyncError) {
-      code = e.code;
-      message = e.message;
-      hint = e.hint;
-      if (Array.isArray(e.details)) files = e.details;
-    } else {
-      message = e instanceof Error ? e.message : String(e);
-      if (process.env.ENVSYNC_DEBUG === '1' && e instanceof Error && e.stack) io.warn(e.stack);
-    }
+    const { code, message, hint, files, debug } = describeError(e, process.env.ENVSYNC_DEBUG === '1');
+    if (debug) io.warn(debug);
     if (json) {
       emit({ ok: false, command, error: { code, message, ...(hint ? { hint } : {}) }, files });
     }
@@ -172,6 +161,8 @@ async function main(argv: string[]): Promise<void> {
 }
 
 main(process.argv).catch((e: unknown) => {
-  process.stderr.write(`오류: ${e instanceof Error ? e.message : String(e)}\n`);
+  const { message, debug } = describeError(e, process.env.ENVSYNC_DEBUG === '1');
+  if (debug) process.stderr.write(`${debug}\n`);
+  process.stderr.write(`오류: ${message}\n`);
   process.exitCode = exitCodeFor('UNEXPECTED');
 });
