@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { EnvsyncError } from '../src/errors.js';
+import type { Sops, SopsFormat } from '../src/sops.js';
 import type { Runner } from '../src/exec.js';
 import type { Note, Vault, VaultStatus } from '../src/bitwarden.js';
 import type { Io } from '../src/io.js';
@@ -60,6 +62,35 @@ export class FakeVault implements Vault {
     };
     this.notes.set(name, note);
     return note;
+  }
+}
+
+/** 암호문 = "FAKE:<format>:<base64(평문)>". lossy 형식은 복호화 때 끝 줄바꿈 하나를 잃는다. */
+export class FakeSops implements Sops {
+  lossy: Set<SopsFormat>;
+
+  constructor(opts: { lossy?: Set<SopsFormat> } = {}) {
+    this.lossy = opts.lossy ?? new Set();
+  }
+
+  async checkVersion(): Promise<void> {}
+
+  async encryptFile(plainPath: string, format: SopsFormat, _recipient: string): Promise<Buffer> {
+    const plain = await readFile(plainPath);
+    return Buffer.from(`FAKE:${format}:${plain.toString('base64')}`, 'utf8');
+  }
+
+  async decryptFile(encPath: string, format: SopsFormat, identity: string): Promise<Buffer> {
+    if (identity !== 'AGE-SECRET-KEY-FAKE') throw new EnvsyncError('SOPS_ERROR', 'sops 복호화에 실패했습니다.');
+    const text = (await readFile(encPath)).toString('utf8');
+    const m = /^FAKE:(dotenv|yaml|binary):(.*)$/s.exec(text);
+    if (!m) throw new EnvsyncError('SOPS_ERROR', 'sops 복호화에 실패했습니다.');
+    let plain = Buffer.from(m[2], 'base64');
+    if (this.lossy.has(m[1] as SopsFormat) && plain.length > 0 && plain[plain.length - 1] === 0x0a) {
+      plain = plain.subarray(0, plain.length - 1);
+    }
+    void format;
+    return plain;
   }
 }
 
