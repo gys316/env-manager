@@ -60,6 +60,18 @@ export async function isIgnored(runner: Runner, root: string, relPath: string): 
   return r.code === 0;
 }
 
+/**
+ * 여러 경로를 `git check-ignore --stdin` 한 번으로 검사해 무시되는 경로 집합을 돌려준다.
+ * 디렉터리는 끝에 `/`를 붙여 넘기면 디렉터리 자체가 규칙에 걸리는지 본다(돌려줄 때도 입력 그대로).
+ */
+export async function ignoredSet(runner: Runner, root: string, relPaths: string[]): Promise<Set<string>> {
+  if (relPaths.length === 0) return new Set();
+  const input = relPaths.map((p) => p + '\x00').join('');
+  const r = await runner('git', ['check-ignore', '-z', '--stdin'], { cwd: root, input });
+  if (r.code !== 0) return new Set();
+  return new Set(r.stdout.toString('utf8').split('\x00').filter((s) => s !== ''));
+}
+
 export async function isTracked(runner: Runner, root: string, relPath: string): Promise<boolean> {
   const r = await runner('git', ['ls-files', '--error-unmatch', '--', relPath], { cwd: root });
   return r.code === 0;
