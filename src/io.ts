@@ -42,8 +42,17 @@ function readHidden(prompt: string): Promise<string> {
   });
 }
 
-export function createTerminalIo(opts: { json: boolean }): Io {
-  const interactive = !!process.stdin.isTTY && !!process.stderr.isTTY;
+/** --json 모드는 항상 비대화형이다(프롬프트로 멈추지 않고 오류를 돌려준다). */
+export function isInteractive(opts: { json: boolean; stdinIsTTY?: boolean; stderrIsTTY?: boolean }): boolean {
+  return !opts.json && !!opts.stdinIsTTY && !!opts.stderrIsTTY;
+}
+
+export function createTerminalIo(opts: { json: boolean; stdinIsTTY?: boolean; stderrIsTTY?: boolean }): Io {
+  const interactive = isInteractive({
+    json: opts.json,
+    stdinIsTTY: opts.stdinIsTTY ?? !!process.stdin.isTTY,
+    stderrIsTTY: opts.stderrIsTTY ?? !!process.stderr.isTTY,
+  });
   return {
     interactive,
     json: opts.json,
