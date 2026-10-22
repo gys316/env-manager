@@ -68,14 +68,17 @@ export class FakeVault implements Vault {
 /** 암호문 = "FAKE:<format>:<base64(평문)>". lossy 형식은 복호화 때 끝 줄바꿈 하나를 잃는다. */
 export class FakeSops implements Sops {
   lossy: Set<SopsFormat>;
+  failEncrypt: Set<SopsFormat>;
 
-  constructor(opts: { lossy?: Set<SopsFormat> } = {}) {
+  constructor(opts: { lossy?: Set<SopsFormat>; failEncrypt?: Set<SopsFormat> } = {}) {
     this.lossy = opts.lossy ?? new Set();
+    this.failEncrypt = opts.failEncrypt ?? new Set();
   }
 
   async checkVersion(): Promise<void> {}
 
   async encryptFile(plainPath: string, format: SopsFormat, _recipient: string): Promise<Buffer> {
+    if (this.failEncrypt.has(format)) throw new EnvsyncError('SOPS_ERROR', 'sops 암호화에 실패했습니다.');
     const plain = await readFile(plainPath);
     return Buffer.from(`FAKE:${format}:${plain.toString('base64')}`, 'utf8');
   }

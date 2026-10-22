@@ -40,6 +40,21 @@ test('unlock failure does not leak stderr or password', async () => {
   expect(err.message).not.toContain('hunter2');
 });
 
+test('null notes from bw are normalized to empty string', async () => {
+  const r = recordingRunner([
+    { stdout: '[{"id":"F1","name":"envsync"}]' },
+    { stdout: '[{"id":"1","type":2,"name":"n1","notes":null,"revisionDate":"r"}]' },
+  ]);
+  const bw = new BwCli(r.run, exe, 'T');
+  expect(await bw.findNote('n1')).toEqual({ id: '1', name: 'n1', notes: '', revisionDate: 'r' });
+  const r2 = recordingRunner([
+    { stdout: '[{"id":"F1","name":"envsync"}]' },
+    { stdout: '[]' },
+    { stdout: '{"id":"I1","name":"n1","notes":null,"revisionDate":"r2"}' },
+  ]);
+  expect(await new BwCli(r2.run, exe, 'T').upsertNote('n1', '')).toEqual({ id: 'I1', name: 'n1', notes: '', revisionDate: 'r2' });
+});
+
 test('create item sends secret via stdin only', async () => {
   const r = recordingRunner([
     { stdout: '[]' },

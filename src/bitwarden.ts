@@ -99,7 +99,8 @@ export class BwCli implements Vault {
       throw new EnvsyncError('DUPLICATE_ITEM', `같은 이름의 항목이 ${hits.length}개 있습니다: ${name}`, 'Bitwarden에서 중복 항목을 정리하세요.');
     }
     const h = hits[0];
-    return { id: h.id, name: h.name, notes: h.notes, revisionDate: h.revisionDate };
+    // 실제 bw는 빈 노트에 notes: null을 돌려준다.
+    return { id: h.id, name: h.name, notes: h.notes ?? '', revisionDate: h.revisionDate };
   }
 
   async upsertNote(name: string, content: string): Promise<Note> {
@@ -117,6 +118,6 @@ export class BwCli implements Vault {
       item.notes = content;
       result = this.parse<Note>(await this.bw(['edit', 'item', existing.id], { input: b64(item) }));
     }
-    return { id: result.id, name: result.name, notes: result.notes, revisionDate: result.revisionDate };
+    return { id: result.id, name: result.name, notes: result.notes ?? '', revisionDate: result.revisionDate };
   }
 }
