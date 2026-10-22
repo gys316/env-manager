@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - name: Configure git identity (tests commit in temp repos)
+        run: git config --global user.email ci@example.com && git config --global user.name ci
+      - name: Install sops (ubuntu)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          curl -fsSL -o sops https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+          chmod +x sops
+          sudo mv sops /usr/local/bin/sops
+      - name: Install sops (macos)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: brew install sops
+      - name: Install sops (windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: choco install sops -y
+      - run: npm run build
+      - run: npm test
