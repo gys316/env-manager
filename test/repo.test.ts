@@ -76,3 +76,21 @@ test('ensureGitattributes adds a line once', async () => {
   await ensureGitattributes(root, '*.enc binary');
   expect(await readFile(join(root, '.gitattributes'), 'utf8')).toBe('*.enc binary\n');
 });
+
+test('ensureIgnored does not trust global excludesFile', async () => {
+  const root = await makeTempRepo();
+  const ex = join(await mkdtemp(join(tmpdir(), 'ex')), 'global-ignore');
+  await writeFile(ex, '.env\n');
+  await spawnRunner('git', ['config', 'core.excludesFile', ex], { cwd: root });
+  expect(await isIgnored(spawnRunner, root, '.env')).toBe(true);
+  expect(await ensureIgnored(spawnRunner, root, ['.env'])).toEqual(['/.env']);
+  expect(await readFile(join(root, '.gitignore'), 'utf8')).toContain('/.env');
+});
+
+test('ensureIgnored does not trust .git/info/exclude', async () => {
+  const root = await makeTempRepo();
+  await mkdir(join(root, '.git', 'info'), { recursive: true });
+  await writeFile(join(root, '.git', 'info', 'exclude'), '.env\n');
+  expect(await isIgnored(spawnRunner, root, '.env')).toBe(true);
+  expect(await ensureIgnored(spawnRunner, root, ['.env'])).toEqual(['/.env']);
+});

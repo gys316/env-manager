@@ -65,6 +65,18 @@ export async function isTracked(runner: Runner, root: string, relPath: string): 
   return r.code === 0;
 }
 
+// 레포 안의 .gitignore 규칙으로 무시되는지만 본다. 전역 excludes나 .git/info/exclude는
+// 다른 PC에 없으므로 인정하지 않는다.
+async function isIgnoredByRepoGitignore(runner: Runner, root: string, relPath: string): Promise<boolean> {
+  const r = await runner('git', ['check-ignore', '-v', '-z', '--stdin'], { cwd: root, input: relPath + '\x00' });
+  if (r.code !== 0) return false;
+  const [source, , pattern] = r.stdout.toString('utf8').split('\x00');
+  if (!source || !pattern || pattern.startsWith('!')) return false;
+  if (path.basename(source) !== '.gitignore') return false;
+  const rel = path.relative(root, path.resolve(root, source));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 async function readIfExists(file: string): Promise<string> {
   try {
     return await readFile(file, 'utf8');
@@ -96,7 +108,7 @@ export async function ensureIgnored(runner: Runner, root: string, patterns: stri
       continue;
     }
     const rel = raw.replace(/^\/+/, '');
-    if (await isIgnored(runner, root, rel)) continue;
+    if (await isIgnoredByRepoGitignore(runner, root, rel)) continue;
     const pattern = '/' + rel;
     if (!added.includes(pattern)) added.push(pattern);
   }
