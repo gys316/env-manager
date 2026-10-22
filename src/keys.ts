@@ -1,7 +1,7 @@
-import { generateIdentity, identityToRecipient } from 'age-encryption';
+import { generateX25519Identity, identityToRecipient } from 'age-encryption';
 
 export async function generateAgeKey(): Promise<{ identity: string; recipient: string }> {
-  const identity = await generateIdentity();
+  const identity = await generateX25519Identity();
   return { identity, recipient: await identityToRecipient(identity) };
 }
 

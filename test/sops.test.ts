@@ -1,13 +1,14 @@
-import { SopsCli } from '../src/sops.js';
+import { NEUTRAL_CONFIG, SopsCli } from '../src/sops.js';
 import { FakeSops, recordingRunner } from './fakes.js';
 
+const cfg = ['--config', NEUTRAL_CONFIG];
 const exe = { command: 'sops', prefixArgs: [] };
 
 test('decrypt passes identity via env only', async () => {
   const r = recordingRunner([{ stdout: 'A=1\n' }]);
   const out = await new SopsCli(r.run, exe).decryptFile('/r/.env.enc', 'dotenv', 'AGE-SECRET-KEY-1XYZ');
   expect(out.toString()).toBe('A=1\n');
-  expect(r.calls[0].args).toEqual(['decrypt', '--input-type', 'dotenv', '--output-type', 'dotenv', '/r/.env.enc']);
+  expect(r.calls[0].args).toEqual([...cfg, 'decrypt', '--input-type', 'dotenv', '--output-type', 'dotenv', '/r/.env.enc']);
   expect(r.calls[0].env?.SOPS_AGE_KEY).toBe('AGE-SECRET-KEY-1XYZ');
   expect(JSON.stringify(r.calls[0].args)).not.toContain('AGE-SECRET-KEY');
 });
@@ -16,7 +17,7 @@ test('encrypt uses --age and file path, no stdin', async () => {
   const r = recordingRunner([{ stdout: 'CIPHER' }]);
   const out = await new SopsCli(r.run, exe).encryptFile('/r/.env', 'dotenv', 'age1abc');
   expect(out.toString()).toBe('CIPHER');
-  expect(r.calls[0].args).toEqual(['encrypt', '--age', 'age1abc', '--input-type', 'dotenv', '--output-type', 'dotenv', '/r/.env']);
+  expect(r.calls[0].args).toEqual([...cfg, 'encrypt', '--age', 'age1abc', '--input-type', 'dotenv', '--output-type', 'dotenv', '/r/.env']);
   expect(r.calls[0].input).toBeUndefined();
 });
 
@@ -36,7 +37,7 @@ test('old sops version rejected', async () => {
 test('new sops version accepted', async () => {
   const r = recordingRunner([{ stdout: 'sops 3.10.2 (latest)\n' }]);
   await expect(new SopsCli(r.run, exe).checkVersion()).resolves.toBeUndefined();
-  expect(r.calls[0].args).toEqual(['--version']);
+  expect(r.calls[0].args).toEqual(['--version', '--disable-version-check']);
 });
 
 test('unparseable version rejected', async () => {

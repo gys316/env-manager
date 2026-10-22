@@ -1,0 +1,3 @@
+# envsync: sops에 넘기는 중립 설정. 레포의 .sops.yaml(encrypted_regex 등)이 적용되지 않게 --config로 지정한다.
+creation_rules:
+  - {}
