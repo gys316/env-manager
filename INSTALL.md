@@ -51,7 +51,7 @@ SOPS 모드(암호화 파일을 git에 커밋하는 방식)를 쓸지 모르면 
 **envsync CLI**
 
 ```
-npm i -g github:gys316/env-manager
+npm i -g https://github.com/gys316/env-manager/archive/refs/heads/main.tar.gz
 ```
 
 레포를 이미 클론했다면 그 폴더에서 `npm install && npm run build && npm link`로 대신한다.

@@ -40,7 +40,7 @@ brew install sops                               # macOS
 **3. envsync CLI**
 
 ```
-npm i -g github:gys316/env-manager
+npm i -g https://github.com/gys316/env-manager/archive/refs/heads/main.tar.gz
 # 또는 클론한 폴더에서
 npm install && npm run build && npm link
 ```
@@ -228,4 +228,4 @@ export BW_SESSION=$(bw unlock --raw)
 
 ## 개발
 
-`src/`를 고친 뒤에는 `npm run build`로 `dist/`를 다시 만들어 함께 커밋하세요. `npm i -g github:gys316/env-manager`는 설치할 때 빌드하지 않고 커밋된 `dist/`를 그대로 씁니다(CI가 `dist/`가 최신인지 검사합니다).
+`src/`를 고친 뒤에는 `npm run build`로 `dist/`를 다시 만들어 함께 커밋하세요. `npm i -g https://github.com/gys316/env-manager/archive/refs/heads/main.tar.gz`는 설치할 때 빌드하지 않고 커밋된 `dist/`를 그대로 씁니다(CI가 `dist/`가 최신인지 검사합니다).
