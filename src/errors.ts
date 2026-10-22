@@ -19,11 +19,13 @@ export type ErrorCode =
 export class EnvsyncError extends Error {
   code: ErrorCode;
   hint?: string;
-  constructor(code: ErrorCode, message: string, hint?: string) {
+  details?: unknown;
+  constructor(code: ErrorCode, message: string, hint?: string, details?: unknown) {
     super(message);
     this.name = 'EnvsyncError';
     this.code = code;
     this.hint = hint;
+    this.details = details;
   }
 }
 
