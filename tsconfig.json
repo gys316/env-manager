@@ -4,11 +4,16 @@
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "strict": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "esModuleInterop": true,
     "skipLibCheck": true,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "newLine": "lf"
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }

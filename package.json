@@ -10,8 +10,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
-    "prepare": "tsc"
+    "test": "vitest run"
   },
   "dependencies": {
     "age-encryption": "^0.3.1",

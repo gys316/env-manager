@@ -225,3 +225,7 @@ export BW_SESSION=$(bw unlock --raw)
 ```
 
 스킬은 항상 `--json`으로 실행하고, 비밀값 파일 내용은 읽거나 출력하지 않으며, `push` / `pull --force` / `--yes`는 변경 요약(키 이름)을 보여주고 승인을 받은 뒤에만 실행합니다.
+
+## 개발
+
+`src/`를 고친 뒤에는 `npm run build`로 `dist/`를 다시 만들어 함께 커밋하세요. `npm i -g github:gys316/env-manager`는 설치할 때 빌드하지 않고 커밋된 `dist/`를 그대로 씁니다(CI가 `dist/`가 최신인지 검사합니다).
