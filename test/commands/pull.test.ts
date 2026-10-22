@@ -104,6 +104,16 @@ describe('pull fast-forward', () => {
     expect(await backups(pcB.root)).toEqual([]);
   });
 
+  test('fast-forward with --force still writes no backup', async () => {
+    const vault = await seed({ '.env': 'A=1\n' });
+    const b = await makeCtx({ files: ['.env'], local: {}, vault });
+    await pull(b.ctx, { force: false });
+    await vault.upsertNote('envsync:kys/app:.env', 'A=2\n');
+    expect((await pull(b.ctx, { force: true }))[0].status).toBe('pulled');
+    expect(await readFile(join(b.root, '.env'), 'utf8')).toBe('A=2\n');
+    expect(await backups(b.root)).toEqual([]);
+  });
+
   test('no state record and content differs -> skipped', async () => {
     const vault = await seed({ '.env': 'A=1\n' });
     const b = await makeCtx({ files: ['.env'], local: { '.env': 'A=9\n' }, vault });

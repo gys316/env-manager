@@ -129,6 +129,36 @@ describe('diffKeys', () => {
     }
   });
 
+  test('base64url and short first lines followed by an empty-assignment tail -> opaque (review round 2)', () => {
+    const url64 = 'QWxhZGRpbjpvcGVuIHNlc2FtZQ-_QWxhZGRpbjpvcGVuIHNlc2FtZQ-_QWxhZGRp';
+    expect(url64.length).toBe(64);
+    const cases: [string, string][] = [
+      [`A=1\nKEY=${url64}\nSecretTailAbc9=\n`, 'SecretTailAbc9'],
+      [`A=1\nKEY=${url64}\nSecret-Tail_Abc9=\n`, 'Secret-Tail_Abc9'],
+      ['A=1\nKEY=QWxhZGRpbjpvcGVuIHNlc2FtZQ\nSecretTailAbc9=\n', 'SecretTailAbc9'],
+      ['A=1\nKEY=QWxhZGRpbjpvcGVuIHNlc2FtZQ\nSecret.Tail9= # note\n', 'Secret.Tail9'],
+      ['A=1\nKEY=QWxhZGRpbjpvcGVuIHNlc2FtZQ\nSecretTail9=#note\n', 'SecretTail9'],
+    ];
+    expect('QWxhZGRpbjpvcGVuIHNlc2FtZQ'.length).toBe(26);
+    for (const [t, frag] of cases) {
+      const d = diffKeys(b('A=1\n'), b(t), 'dotenv');
+      expect(d).toEqual(OPAQUE);
+      noFragment(d, frag);
+    }
+  });
+
+  test('normal files with an empty assignment after a short or non-base64 value stay non-opaque', () => {
+    expect(diffKeys(null, b('A=1\nEMPTY=\n'), 'dotenv'))
+      .toEqual({ added: ['A', 'EMPTY'], removed: [], changed: [], opaque: false });
+    expect(diffKeys(null, b('HOST=localhost\nPASSWORD=\n'), 'dotenv'))
+      .toEqual({ added: ['HOST', 'PASSWORD'], removed: [], changed: [], opaque: false });
+    expect(diffKeys(null, b('URL=postgres://u@h/db\nEMPTY=\n'), 'dotenv'))
+      .toEqual({ added: ['EMPTY', 'URL'], removed: [], changed: [], opaque: false });
+    // 값이 '='로 끝나면 완결된 base64이므로 다음 빈 대입은 정상.
+    expect(diffKeys(null, b('KEY=QWxhZGRpbjpvcGVuIHNlc2FtZQ==\nEMPTY=\n'), 'dotenv'))
+      .toEqual({ added: ['EMPTY', 'KEY'], removed: [], changed: [], opaque: false });
+  });
+
   test('standalone base64-looking empty assignment (>=16 chars, mixed case + digits) -> opaque', () => {
     const d = diffKeys(null, b('A=1\nMIIBIjANBgkqhkiG9w0=\nB=2\n'), 'dotenv');
     expect(d).toEqual(OPAQUE);

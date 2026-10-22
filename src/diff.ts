@@ -18,8 +18,11 @@ class DotenvParseError extends Error {
 
 const ASSIGNMENT = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*=(.*)$/;
 const QUOTES = new Set(['"', "'", '`']);
-/** 줄바꿈된 base64의 첫 줄로 보이는 따옴표 없는 값. */
-const LONG_BASE64 = /^[A-Za-z0-9+/]{40,}={0,2}$/;
+/**
+ * 줄바꿈된 base64/base64url 값의 앞부분으로 보이는 따옴표 없는 값(16자 이상).
+ * '=' 패딩은 값 끝에만 오므로 '='로 끝나는 값은 완결된 값으로 보고 포함하지 않는다.
+ */
+const WRAPPABLE_BASE64 = /^[A-Za-z0-9+/_-]{16,}$/;
 /** 대·소문자·숫자가 섞인 16자 이상 이름: base64 조각일 가능성이 커서 빈 대입으로 해석하지 않는다. */
 const isBase64LikeName = (k: string) =>
   k.length >= 16 && /^[A-Za-z0-9]+$/.test(k) && /[A-Z]/.test(k) && /[a-z]/.test(k) && /[0-9]/.test(k);
@@ -33,23 +36,25 @@ export function parseDotenv(input: string): Map<string, string> {
   const text = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const lines = text.split('\n');
   const out = new Map<string, string>();
-  // 바로 앞 줄이 따옴표 없는 긴 base64 값이었는지(줄바꿈된 값의 다음 줄일 수 있음).
-  let prevLongBase64 = false;
+  // 바로 앞 줄이 줄바꿈된 base64로 보이는 따옴표 없는 값이었는지(이 줄이 그 끝 조각일 수 있음).
+  let prevWrappable = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line === '' || line.startsWith('#')) {
-      prevLongBase64 = false;
+      prevWrappable = false;
       continue;
     }
     const m = ASSIGNMENT.exec(lines[i].trimStart());
     // `KEY==...`는 base64 조각(PEM 끝 줄 등)일 가능성이 커서 해석하지 않는다.
     if (!m || m[2].startsWith('=')) throw new DotenvParseError();
     const key = m[1];
-    // `조각=`처럼 값이 빈 대입이 base64 끝 줄일 수 있으면 조각이 키 이름으로 새지 않도록 해석하지 않는다.
-    if (m[2].trim() === '' && /^[A-Za-z0-9]+$/.test(key) && (prevLongBase64 || isBase64LikeName(key))) {
+    // 빈 대입(`조각=`, 뒤에 주석만 있는 경우 포함)은 base64 끝 줄일 수 있다. 조각이 키 이름으로 새지 않도록
+    // 앞 줄이 줄바꿈될 수 있는 base64 값이면 키 문자와 상관없이, 아니면 키가 base64처럼 보일 때 해석하지 않는다.
+    const emptyValue = /^\s*(#.*)?$/.test(m[2]);
+    if (emptyValue && (prevWrappable || (/^[A-Za-z0-9]+$/.test(key) && isBase64LikeName(key)))) {
       throw new DotenvParseError();
     }
-    prevLongBase64 = false;
+    prevWrappable = false;
     let rest = m[2].trimStart();
     let value: string;
     const q = rest[0];
@@ -70,7 +75,7 @@ export function parseDotenv(input: string): Map<string, string> {
       const hash = rest.search(/\s#/);
       if (hash >= 0) rest = rest.slice(0, hash);
       value = rest.trim();
-      prevLongBase64 = LONG_BASE64.test(value);
+      prevWrappable = WRAPPABLE_BASE64.test(value);
     }
     out.set(key, value);
   }

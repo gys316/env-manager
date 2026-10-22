@@ -16,9 +16,9 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 
 ## 흐름
 
-1. **파일이 없어 앱이 실행되지 않을 때**: `envsync status --json` 실행. `remote-only`(로컬에 없고 원격에 있음)인 파일이 있으면 `envsync pull --json`을 실행한다(로컬 파일이 없을 때 pull은 덮어쓰기가 아니므로 승인 없이 실행해도 된다). `missing`(양쪽 다 없음)이면 사용자에게 다른 PC에서 push가 필요하다고 알린다. `.envsync.config`가 없으면(`NOT_INITIALIZED`) 사용자에게 `envsync init`을 안내한다.
+1. **파일이 없어 앱이 실행되지 않을 때**: `envsync status --json` 실행. `remote-only`(로컬에 없고 원격에 있음)인 파일이 있으면 `envsync pull --json`을 실행한다(로컬 파일이 없을 때 pull은 덮어쓰기가 아니므로 승인 없이 실행해도 된다). `missing`(양쪽 다 없음)이면 사용자에게 다른 PC에서 push가 필요하다고 알린다. `.envsync.config`가 없으면(`NOT_INITIALIZED`) 사용자에게 `envsync init`을 안내한다. pull 결과에서 원래 로컬에 있던 파일이 `pulled`로 나왔으면(마지막 동기화 이후 고치지 않아 원격 내용으로 fast-forward됨) 그 파일 경로와 `added`/`changed`/`removed` 키 이름을 사용자에게 꼭 알린다.
 2. **env를 바꾼 뒤 반영할 때**: 먼저 `envsync push --json`(`--yes` 없이)을 실행한다. 아무것도 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)로 끝나며, `files`에 올릴 파일별 `added`/`changed`/`removed` 키 이름(또는 `opaque`)이 담긴다. 이 키 이름을 사용자에게 보여주고 승인받은 뒤에만 `envsync push --yes --json`을 실행한다. push 결과의 키 이름을 요약해서 보고한다. 바뀐 파일이 없으면 첫 실행이 그대로 `ok: true`로 끝난다. SOPS 모드이면 생성된 `<파일>.enc`를 커밋하라고 안내한다. push가 `.envsync.config`가 바뀌었다고 알리면(binary 형식 전환) `.envsync.config`도 `.enc`와 함께 커밋하라고 안내한다. pull이 `.gitignore`에 파일을 추가했다고 경고하면 `.gitignore` 변경을 커밋하라고 안내한다.
-3. **다른 PC의 변경을 받을 때**: 별도 `fetch` 명령은 없다. `envsync status --json`(내부에서 `bw sync` 실행)으로 `remote-changed`인 파일을 확인한다. `remote-changed`는 이 PC에서 로컬을 고치지 않았다는 뜻이므로 `envsync pull --json`이 `--force` 없이 원격 내용으로 갱신한다(fast-forward, 백업 없음). 사용자에게 어떤 파일이 갱신되는지 알리고 pull을 실행한다. `conflict`(양쪽 다 바뀜)이면 pull은 그 파일을 건너뛰고 `PULL_SKIPPED`로 끝난다.
+3. **다른 PC의 변경을 받을 때**: 별도 `fetch` 명령은 없다. `envsync status --json`(내부에서 `bw sync` 실행)으로 `remote-changed`인 파일을 확인한다. `remote-changed`는 이 PC에서 로컬을 고치지 않았다는 뜻이므로 `envsync pull --json`이 `--force` 없이 원격 내용으로 갱신한다(fast-forward, 백업 없음). 사용자에게 어떤 파일이 갱신되는지 알리고 pull을 실행한다. `conflict`(양쪽 다 바뀜)나 `differs`(동기화 기록 없이 내용이 다름)이면 pull은 그 파일을 건너뛰고 `PULL_SKIPPED`로 끝난다.
 4. 결과는 키 이름과 경로까지만 사용자에게 전달한다.
 
 ## 오류 처리
@@ -39,7 +39,7 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 |---|---|
 | `envsync status --json` | 동기화 상태 확인 (읽기 전용, 승인 불필요) |
 | `envsync pull --json` | Bitwarden에서 내려받기. 마지막 동기화 이후 로컬을 고치지 않은 파일은 원격으로 갱신(fast-forward, 백업 없음), 로컬을 고친 파일은 건너뛰고 `PULL_SKIPPED` |
-| `envsync pull --force --json` | 로컬을 `<파일>.envsync-backup`으로 백업하고 덮어쓰기 (승인 필요) |
+| `envsync pull --force --json` | 로컬을 고친 파일을 `<파일>.envsync-backup`으로 백업하고 덮어쓰기 (승인 필요). 마지막 동기화 이후 로컬을 고치지 않은 파일은 `--force`여도 백업 없이 fast-forward된다 |
 | `envsync push --json` | 올릴 변경(키 이름)만 확인. 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)와 `files`를 돌려준다 |
 | `envsync push --yes --json` | 올리기 (위 키 이름을 보여주고 승인받은 뒤에만) |
 | `envsync push --force --yes --json` | 충돌 검사 없이 덮어쓰기 (명시적 승인 필요) |
