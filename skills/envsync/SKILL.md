@@ -18,13 +18,14 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 
 1. **파일이 없어 앱이 실행되지 않을 때**: `envsync status --json` 실행. `remote-only`(로컬에 없고 원격에 있음)인 파일이 있으면 `envsync pull --json`을 실행한다(로컬 파일이 없을 때 pull은 덮어쓰기가 아니므로 승인 없이 실행해도 된다). `missing`(양쪽 다 없음)이면 사용자에게 다른 PC에서 push가 필요하다고 알린다. `.envsync.config`가 없으면(`NOT_INITIALIZED`) 사용자에게 `envsync init`을 안내한다.
 2. **env를 바꾼 뒤 반영할 때**: 먼저 `envsync push --json`(`--yes` 없이)을 실행한다. 아무것도 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)로 끝나며, `files`에 올릴 파일별 `added`/`changed`/`removed` 키 이름(또는 `opaque`)이 담긴다. 이 키 이름을 사용자에게 보여주고 승인받은 뒤에만 `envsync push --yes --json`을 실행한다. push 결과의 키 이름을 요약해서 보고한다. 바뀐 파일이 없으면 첫 실행이 그대로 `ok: true`로 끝난다. SOPS 모드이면 생성된 `<파일>.enc`를 커밋하라고 안내한다. push가 `.envsync.config`가 바뀌었다고 알리면(binary 형식 전환) `.envsync.config`도 `.enc`와 함께 커밋하라고 안내한다. pull이 `.gitignore`에 파일을 추가했다고 경고하면 `.gitignore` 변경을 커밋하라고 안내한다.
-3. 결과는 키 이름과 경로까지만 사용자에게 전달한다.
+3. **다른 PC의 변경을 받을 때**: 별도 `fetch` 명령은 없다. `envsync status --json`(내부에서 `bw sync` 실행)으로 `remote-changed`인 파일을 확인한다. `remote-changed`는 이 PC에서 로컬을 고치지 않았다는 뜻이므로 `envsync pull --json`이 `--force` 없이 원격 내용으로 갱신한다(fast-forward, 백업 없음). 사용자에게 어떤 파일이 갱신되는지 알리고 pull을 실행한다. `conflict`(양쪽 다 바뀜)이면 pull은 그 파일을 건너뛰고 `PULL_SKIPPED`로 끝난다.
+4. 결과는 키 이름과 경로까지만 사용자에게 전달한다.
 
 ## 오류 처리
 
 - `VAULT_LOCKED`(exit 4) / `NOT_LOGGED_IN`(exit 3): 비밀번호나 토큰을 요청하지 말고 사용자에게 안내한다. "별도 터미널에서 `envsync pull`을 직접 실행해 비밀번호를 입력하세요", 또는 "`BW_SESSION`을 설정한 셸에서 Claude Code를 다시 시작하세요(PowerShell: `$env:BW_SESSION = (bw unlock --raw)`, bash/zsh: `export BW_SESSION=$(bw unlock --raw)`)". `NOT_LOGGED_IN`이면 `bw login`이 먼저 필요하다. `bw unlock`은 직접 실행하지 않는다.
 - `CONFLICT`(exit 5): 먼저 `pull`을 제안한다(`pull`에서 `PULL_SKIPPED`가 나올 수 있다). 사용자가 로컬이 맞다고 명시적으로 승인한 경우에만 `push --force --yes`를 쓴다.
-- `PULL_SKIPPED`(exit 6): 결과 `files`에서 `status: "skipped"`인 파일의 다른 키 이름(`added`/`changed`/`removed`)을 보여주고, `pull --force`(기존 파일은 `<파일>.envsync-backup`으로 백업됨. 다른 내용의 백업이 이미 있으면 `<파일>.envsync-backup-<시각>`)를 할지 묻는다. 승인 후에만 실행한다.
+- `PULL_SKIPPED`(exit 6): 이제 이 PC에서 로컬을 고쳤거나 동기화 기록이 없는 파일에서만 난다(로컬을 안 고쳤으면 pull이 `--force` 없이 원격 변경을 받아온다). 결과 `files`에서 `status: "skipped"`인 파일의 다른 키 이름(`added`/`changed`/`removed`)을 보여주고, `pull --force`(기존 파일은 `<파일>.envsync-backup`으로 백업됨. 다른 내용의 백업이 이미 있으면 `<파일>.envsync-backup-<시각>`)를 할지 묻는다. 승인 후에만 실행한다.
 - `CONFIRMATION_REQUIRED`(exit 8): 아무것도 바뀌지 않았다. `files`의 키 이름을 사용자에게 보여주고 승인받은 뒤 `--yes`를 붙여 다시 실행한다.
 - `UNSUPPORTED_FILE`(exit 2)로 UTF-8이 아니라고 하면: 사용자에게 파일을 UTF-8로 다시 저장하거나 `envsync init --encrypt`를 쓰라고 안내한다. 파일을 직접 열어 변환하지 않는다.
 - `NOTE_TOO_LARGE`(exit 9): vault 모드의 7000바이트 제한. 사용자에게 `envsync init --encrypt`(SOPS 모드)를 안내한다.
@@ -37,7 +38,7 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 | 명령 | 설명 |
 |---|---|
 | `envsync status --json` | 동기화 상태 확인 (읽기 전용, 승인 불필요) |
-| `envsync pull --json` | Bitwarden에서 내려받기. 로컬 내용이 다른 파일은 건너뛰고 `PULL_SKIPPED` |
+| `envsync pull --json` | Bitwarden에서 내려받기. 마지막 동기화 이후 로컬을 고치지 않은 파일은 원격으로 갱신(fast-forward, 백업 없음), 로컬을 고친 파일은 건너뛰고 `PULL_SKIPPED` |
 | `envsync pull --force --json` | 로컬을 `<파일>.envsync-backup`으로 백업하고 덮어쓰기 (승인 필요) |
 | `envsync push --json` | 올릴 변경(키 이름)만 확인. 쓰지 않고 `CONFIRMATION_REQUIRED`(exit 8)와 `files`를 돌려준다 |
 | `envsync push --yes --json` | 올리기 (위 키 이름을 보여주고 승인받은 뒤에만) |
@@ -55,7 +56,7 @@ description: .env나 YAML 비밀값 파일이 없어서 앱이 실행되지 않�
 | 3 | `NOT_LOGGED_IN` | `bw login` 필요 |
 | 4 | `VAULT_LOCKED` | 잠겨 있고 비대화형이라 잠금을 풀 수 없음 |
 | 5 | `CONFLICT` | 원격이 마지막 동기화 이후 바뀌었거나, 기준 없이 내용이 다름 |
-| 6 | `PULL_SKIPPED` | 로컬 내용이 달라 pull에서 건너뛴 파일이 있음 |
+| 6 | `PULL_SKIPPED` | 로컬에서 고친(또는 동기화 기록이 없는) 파일이 원격과 달라 pull에서 건너뜀 |
 | 7 | `MISSING_DEPENDENCY` | `bw`/`sops`가 없거나 sops 버전이 3.9 미만 |
 | 8 | `CONFIRMATION_REQUIRED` | 비대화형인데 `--yes` 없이 확인이 필요한 작업 |
 | 9 | `NOTE_TOO_LARGE` / `DUPLICATE_ITEM` / `BW_ERROR` / `SOPS_ERROR` | 저장소 쪽 오류 |

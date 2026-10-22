@@ -91,6 +91,15 @@ export async function pull(ctx: Context, opts: { force: boolean; now?: Date }): 
       const format = fileFormat(p);
       const opaque = config.formats?.[p] === 'binary' || format === null;
       const diff = opaque ? { opaque: true as const } : diffFields(diffKeys(local, remote.content, format));
+      // fast-forward: 마지막 동기화 이후 로컬을 고치지 않았으면 --force 없이, 백업 없이 원격으로 갱신한다.
+      const last = state.get(p);
+      if (last !== undefined && sha256(local) === last.hash) {
+        await ensurePlainIgnored(p);
+        await writeFile(abs, remote.content, { mode: PLAIN_MODE });
+        record();
+        results.push({ path: p, status: 'pulled', ...diff, ...warning });
+        continue;
+      }
       if (!opts.force) {
         results.push({ path: p, status: 'skipped', ...diff, ...warning });
         continue;
@@ -121,7 +130,7 @@ export async function pull(ctx: Context, opts: { force: boolean; now?: Date }): 
     for (const s of skipped) io.info(summaryLine(s));
     throw new EnvsyncError(
       'PULL_SKIPPED',
-      `로컬 내용이 달라 건너뛴 파일이 있습니다: ${skipped.map((s) => s.path).join(', ')}`,
+      `마지막 동기화 이후 로컬에서 고쳤거나 동기화 기록이 없어 건너뛴 파일이 있습니다: ${skipped.map((s) => s.path).join(', ')}`,
       '--force로 덮어쓸 수 있습니다. 기존 파일은 <파일>.envsync-backup으로 백업됩니다.',
       results,
     );

@@ -64,6 +64,66 @@ describe('pull', () => {
   });
 });
 
+describe('pull fast-forward', () => {
+  const backups = async (root: string) => (await readdir(root)).filter((f) => f.includes('envsync-backup'));
+
+  test('local unchanged since last sync -> overwritten without --force and without backup', async () => {
+    const vault = new FakeVault({ state: 'unlocked' });
+    const a = await makeCtx({ files: ['.env'], local: { '.env': 'A=1\n' }, vault });
+    await push(a.ctx, { yes: true, force: false });
+    const pcB = await makeCtx({ files: ['.env'], local: {}, vault });
+    expect((await pull(pcB.ctx, { force: false }))[0].status).toBe('pulled');
+
+    await writeFile(join(a.root, '.env'), 'A=2\nNEW=3\n');
+    expect((await push(a.ctx, { yes: true, force: false }))[0].status).toBe('pushed');
+
+    const r = await pull(pcB.ctx, { force: false });
+    expect(r[0]).toMatchObject({ status: 'pulled', added: ['NEW'], changed: ['A'] });
+    expect(await readFile(join(pcB.root, '.env'), 'utf8')).toBe('A=2\nNEW=3\n');
+    expect(await backups(pcB.root)).toEqual([]);
+    expect(pcB.io.messages.join('\n')).not.toContain('=3');
+    // 다음 pull/push 기준도 갱신된다.
+    expect((await pull(pcB.ctx, { force: false }))[0].status).toBe('unchanged');
+  });
+
+  test('local edited since last sync -> still skipped with PULL_SKIPPED', async () => {
+    const vault = new FakeVault({ state: 'unlocked' });
+    const a = await makeCtx({ files: ['.env'], local: { '.env': 'A=1\n' }, vault });
+    await push(a.ctx, { yes: true, force: false });
+    const pcB = await makeCtx({ files: ['.env'], local: {}, vault });
+    await pull(pcB.ctx, { force: false });
+
+    await writeFile(join(a.root, '.env'), 'A=2\n');
+    await push(a.ctx, { yes: true, force: false });
+    await writeFile(join(pcB.root, '.env'), 'A=1\nLOCAL=1\n');
+
+    const err = await pull(pcB.ctx, { force: false }).catch((e) => e);
+    expect(err).toMatchObject({ code: 'PULL_SKIPPED' });
+    expect(err.details[0]).toMatchObject({ status: 'skipped' });
+    expect(await readFile(join(pcB.root, '.env'), 'utf8')).toBe('A=1\nLOCAL=1\n');
+    expect(await backups(pcB.root)).toEqual([]);
+  });
+
+  test('no state record and content differs -> skipped', async () => {
+    const vault = await seed({ '.env': 'A=1\n' });
+    const b = await makeCtx({ files: ['.env'], local: { '.env': 'A=9\n' }, vault });
+    expect(b.ctx.state.get('.env')).toBeUndefined();
+    const err = await pull(b.ctx, { force: false }).catch((e) => e);
+    expect(err).toMatchObject({ code: 'PULL_SKIPPED' });
+    expect(await readFile(join(b.root, '.env'), 'utf8')).toBe('A=9\n');
+  });
+
+  test('fast-forward still makes sure the plaintext is git-ignored', async () => {
+    const vault = await seed({ 'backend/.env': 'A=1' });
+    const b = await makeCtx({ files: ['backend/.env'], local: {}, vault });
+    await pull(b.ctx, { force: false });
+    await writeFile(join(b.root, '.gitignore'), '');
+    await vault.upsertNote('envsync:kys/app:backend/.env', 'A=2');
+    expect((await pull(b.ctx, { force: false }))[0].status).toBe('pulled');
+    expect(await isIgnored(spawnRunner, b.root, 'backend/.env')).toBe(true);
+  });
+});
+
 describe('pull safety', () => {
   test('restored plaintext not covered by .gitignore gets added and warned', async () => {
     const vault = await seed({ 'backend/.env': 'A=1' });

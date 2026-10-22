@@ -100,7 +100,7 @@ envsync [전역 옵션] <명령>
 |---|---|
 | `init [--encrypt] [--repo <owner/repo>]` | 레포에서 envsync를 초기화합니다. `--encrypt`는 SOPS(age) 모드, `--repo`는 origin remote가 없거나 해석할 수 없을 때 레포 이름을 직접 지정합니다. |
 | `push` | 로컬 파일을 Bitwarden(SOPS 모드는 `.enc`)에 올립니다. 올리기 전에 키 이름 요약을 보여주고 확인을 받습니다. |
-| `pull` | Bitwarden의 파일을 내려받습니다. 로컬 내용이 다른 파일은 건너뜁니다. |
+| `pull` | Bitwarden의 파일을 내려받습니다. 마지막 동기화 이후 로컬을 고치지 않은 파일은 원격 내용으로 바로 갱신하고(fast-forward, 백업 없음), 로컬을 고쳤거나 동기화 기록이 없는데 내용이 다른 파일은 건너뜁니다. |
 | `status` | 로컬과 Bitwarden의 동기화 상태를 봅니다. |
 | `add <file>` | 관리할 파일을 추가합니다. `.env` 계열 또는 `.yml`/`.yaml`만 가능합니다. |
 | `remove <file>` | 관리 목록에서 파일을 뺍니다. Bitwarden 항목과 `.gitignore` 항목은 그대로 둡니다. |
@@ -125,7 +125,7 @@ envsync [전역 옵션] <명령>
 | 3 | `NOT_LOGGED_IN` | `bw login` 필요 |
 | 4 | `VAULT_LOCKED` | 잠겨 있고 비대화형이라 잠금을 풀 수 없음 |
 | 5 | `CONFLICT` | 원격이 마지막 동기화 이후 바뀌었거나, 기준 없이 내용이 다름 |
-| 6 | `PULL_SKIPPED` | 로컬 내용이 달라 pull에서 건너뛴 파일이 있음 |
+| 6 | `PULL_SKIPPED` | 로컬에서 고친(또는 동기화 기록이 없는) 파일이 원격과 달라 pull에서 건너뜀 |
 | 7 | `MISSING_DEPENDENCY` | `bw`/`sops`가 없거나 sops 버전이 3.9 미만 |
 | 8 | `CONFIRMATION_REQUIRED` | 비대화형인데 `--yes` 없이 확인이 필요한 작업 |
 | 9 | `NOTE_TOO_LARGE` / `DUPLICATE_ITEM` / `BW_ERROR` / `SOPS_ERROR` | 저장소 쪽 오류 |
@@ -157,7 +157,7 @@ vault 모드는 파일당 7000바이트까지입니다. `envsync init --encrypt`
 마지막 동기화 이후 원격이 바뀌었거나, 동기화 기록 없이 내용이 다릅니다. 먼저 `envsync pull`로 최신을 받아 확인한 뒤 다시 push하세요. 로컬이 맞다고 확신할 때만 `envsync push --force`를 쓰세요.
 
 **`PULL_SKIPPED`**
-로컬 파일이 Bitwarden 내용과 달라 건너뛴 파일이 있다는 뜻입니다. 어떤 키가 다른지 출력을 확인하고, 원격으로 덮어써도 되면 `envsync pull --force`를 실행하세요. 기존 파일은 `<파일>.envsync-backup`으로 남습니다(이전 백업과 내용이 다르면 `<파일>.envsync-backup-<시각>`).
+마지막 동기화 이후 이 PC에서 로컬 파일을 고쳤거나(새 클론처럼 동기화 기록이 없는 경우 포함) 그 내용이 Bitwarden과 달라 건너뛴 파일이 있다는 뜻입니다. 로컬을 고치지 않았다면 다른 PC의 변경은 `envsync pull`이 `--force` 없이 그대로 받아옵니다. 어떤 키가 다른지 출력을 확인하고, 원격으로 덮어써도 되면 `envsync pull --force`를 실행하세요. 기존 파일은 `<파일>.envsync-backup`으로 남습니다(이전 백업과 내용이 다르면 `<파일>.envsync-backup-<시각>`). 별도 `fetch` 명령은 없습니다. pull 전에 원격만 바뀐 파일을 보려면 `envsync status`(`remote-changed`)를 쓰세요. 양쪽 다 바뀐 파일은 `conflict`로 표시됩니다.
 
 **UTF-8 텍스트가 아님 (`UNSUPPORTED_FILE`)**
 vault 모드는 파일을 텍스트 노트로 저장하므로 UTF-8만 받습니다. Windows PowerShell 5.1의 `>` 리디렉션은 UTF-16으로 저장하니, 편집기에서 UTF-8로 다시 저장하거나 `envsync init --encrypt`(SOPS 모드)를 쓰세요.
