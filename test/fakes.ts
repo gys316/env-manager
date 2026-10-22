@@ -104,8 +104,12 @@ export class MemoryIo implements Io {
   secret: string;
   messages: string[] = [];
   prompts: string[] = [];
+  answers: string[];
 
-  constructor(opts: { interactive?: boolean; json?: boolean; confirmAnswer?: boolean; secret?: string } = {}) {
+  constructor(
+    opts: { interactive?: boolean; json?: boolean; confirmAnswer?: boolean; secret?: string; answers?: string[] } = {},
+  ) {
+    this.answers = [...(opts.answers ?? [])];
     this.interactive = opts.interactive ?? true;
     this.json = opts.json ?? false;
     this.confirmAnswer = opts.confirmAnswer ?? true;
@@ -121,6 +125,10 @@ export class MemoryIo implements Io {
   async confirm(msg: string): Promise<boolean> {
     this.prompts.push(msg);
     return this.confirmAnswer;
+  }
+  async prompt(msg: string): Promise<string> {
+    this.prompts.push(msg);
+    return this.answers.shift() ?? '';
   }
   async promptSecret(msg: string): Promise<string> {
     this.prompts.push(msg);

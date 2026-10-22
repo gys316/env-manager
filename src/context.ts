@@ -1,12 +1,17 @@
 import path from 'node:path';
-import type { Backend } from './backend.js';
-import type { Config } from './config.js';
-import { isSafeRelPath } from './config.js';
+import { SopsBackend, VaultBackend, type Backend } from './backend.js';
+import type { Vault } from './bitwarden.js';
+import { isSafeRelPath, loadConfig, saveConfig, type Config } from './config.js';
 import type { KeyDiff } from './diff.js';
 import { EnvsyncError } from './errors.js';
 import type { Runner } from './exec.js';
 import type { Io } from './io.js';
-import type { SyncState } from './state.js';
+import { findRepoRoot, gitDir } from './repo.js';
+import { ensureUnlocked } from './session.js';
+import type { Sops } from './sops.js';
+import { SyncState } from './state.js';
+
+export type Deps = { runner: Runner; vault: Vault; sops: Sops; io: Io };
 
 export type Context = {
   root: string;
@@ -67,4 +72,22 @@ export function summaryLine(r: FileResult): string {
     ...(r.removed ?? []).map((k) => `-${k}`),
   ];
   return `${r.path}: ${parts.length ? parts.join(' ') : '내용 변경됨'}`;
+}
+
+/** 레포/설정 오류가 vault·sops 호출보다 먼저 드러나도록 순서를 지킨다. */
+export async function createContext(deps: Deps, cwd: string, opts: { sync: boolean }): Promise<Context> {
+  const { runner, vault, sops, io } = deps;
+  const root = await findRepoRoot(runner, cwd);
+  const config = await loadConfig(root);
+  await ensureUnlocked(vault, io);
+  if (opts.sync) await vault.sync();
+  let backend: Backend;
+  if (config.mode === 'sops') {
+    await sops.checkVersion();
+    backend = new SopsBackend(root, vault, sops, config, (c) => saveConfig(root, c));
+  } else {
+    backend = new VaultBackend(vault, config);
+  }
+  const state = await SyncState.load(await gitDir(runner, root));
+  return { root, config, backend, state, io, runner };
 }

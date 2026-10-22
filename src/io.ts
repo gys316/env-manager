@@ -6,6 +6,7 @@ export interface Io {
   info(msg: string): void;
   warn(msg: string): void;
   confirm(msg: string): Promise<boolean>;
+  prompt(msg: string): Promise<string>;
   promptSecret(msg: string): Promise<string>;
 }
 
@@ -54,6 +55,14 @@ export function createTerminalIo(opts: { json: boolean }): Io {
         rl.question(`${msg} [y/N] `, (answer) => {
           rl.close();
           resolve(/^y(es)?$/i.test(answer.trim()));
+        });
+      }),
+    prompt: (msg) =>
+      new Promise<string>((resolve) => {
+        const rl = createInterface({ input: process.stdin, output: process.stderr });
+        rl.question(msg, (answer) => {
+          rl.close();
+          resolve(answer.trim());
         });
       }),
     promptSecret: (msg) => readHidden(msg),
